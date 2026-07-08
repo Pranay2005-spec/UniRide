@@ -127,7 +127,13 @@ export default function Rides() {
     }
   }
 
+  const canVerify = user?.collegeName && user?.email;
+
   async function handleJoin(rideId) {
+    if (!canVerify) {
+      showToast('Verify your college account to book rides', 'warning');
+      return;
+    }
     try {
       const res = await fetch(`${API}/rides/${rideId}/join`, {
         method: 'POST',
@@ -151,6 +157,10 @@ export default function Rides() {
 
   async function handlePublish(e) {
     e.preventDefault();
+    if (!canVerify) {
+      showToast('Verify your college account to offer rides', 'warning');
+      return;
+    }
     if (!offerForm.pickup || !offerForm.destination || !offerForm.time || !offerForm.seats || !offerForm.price) {
       showToast('Please fill all fields', 'error');
       return;

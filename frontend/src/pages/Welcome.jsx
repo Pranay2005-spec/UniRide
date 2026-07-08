@@ -43,16 +43,27 @@ export default function Welcome() {
           className="mb-8"
         >
           {/* Logo */}
-          <div className="w-24 h-24 bg-primary rounded-3xl flex items-center justify-center shadow-lg shadow-primary/20 mx-auto mb-6">
-            <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-              <path d="M24 4L4 14v20l20 10 20-10V14L24 4z" fill="white" opacity="0.9" />
-              <path d="M24 12L12 18v12l12 6 12-6V18L24 12z" fill="#2563EB" />
-              <circle cx="24" cy="24" r="4" fill="white" />
-            </svg>
+          <div className="flex flex-col items-center gap-6 mb-2">
+            <div className="w-32 h-32 md:w-40 md:h-40">
+              <svg viewBox="0 0 48 48" className="w-full h-full drop-shadow-lg">
+                <defs>
+                  <linearGradient id="shieldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#2563EB"/>
+                    <stop offset="100%" stop-color="#1D4ED8"/>
+                  </linearGradient>
+                </defs>
+                <rect width="48" height="48" rx="12" fill="url(#shieldGrad)"/>
+                <path d="M24 8L8 18v12l16 10 16-10V18L24 8z" fill="white" opacity="0.95"/>
+                <path d="M24 14L14 20v8l10 6 10-6v-8L24 14z" fill="#2563EB"/>
+                <circle cx="24" cy="24" r="3" fill="white"/>
+              </svg>
+            </div>
+            <div className="text-center">
+              <h1 className="text-5xl md:text-6xl font-extrabold text-text tracking-tight">
+                UniRide
+              </h1>
+            </div>
           </div>
-          <h1 className="text-3xl font-extrabold text-center text-text">
-            UniRide
-          </h1>
         </motion.div>
 
         <motion.div
