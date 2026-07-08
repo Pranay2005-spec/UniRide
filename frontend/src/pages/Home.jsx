@@ -27,6 +27,7 @@ export default function Home() {
   const [query, setQuery] = useState('');
   const [selectedCollege, setSelectedCollege] = useState(null);
   const [showManageSaved, setShowManageSaved] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
   const isVerified = user?.collegeName && user?.email;
@@ -79,6 +80,11 @@ export default function Home() {
       showToastMsg('Select a destination college', 'error');
       return;
     }
+    setShowConfirm(true);
+  }
+
+  function handleConfirmRide() {
+    setShowConfirm(false);
     navigate('/app/rides', {
       state: { college: selectedCollege, pickup }
     });
@@ -98,6 +104,23 @@ export default function Home() {
     setPickup(route.pickup);
     setSelectedCollege(route.college);
   }
+
+  function calcDistance() {
+    if (!pickup?.position || !selectedCollege?.lat || !selectedCollege?.lng) return null;
+    const [lat1, lon1] = pickup.position;
+    const lat2 = selectedCollege.lat;
+    const lon2 = selectedCollege.lng;
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  const distance = calcDistance();
+  const bikePrice = distance ? Math.round(distance * 4 + 10) : null;
+  const carPrice = distance ? Math.round(distance * 8 + 15) : null;
 
   return (
     <div className="pb-20 relative overflow-hidden">
@@ -225,7 +248,7 @@ export default function Home() {
           </button>
         </div>
 
-        {/* Find Rides CTA */}
+        {/* Find Rides */}
         <button
           onClick={handleFindRides}
           className="w-full mt-3 bg-primary text-text font-semibold rounded-2xl py-3.5 flex items-center justify-center gap-2 shadow-lg shadow-primary/25"
@@ -248,6 +271,7 @@ export default function Home() {
             Save this Route
           </button>
         )}
+
       </div>
 
       {/* College search dropdown */}
@@ -450,6 +474,93 @@ export default function Home() {
                     </div>
                   ))
                 )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Ride confirmation */}
+      <AnimatePresence>
+        {showConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="bg-white w-full sm:max-w-lg sm:rounded-2xl rounded-t-2xl overflow-hidden"
+            >
+              <div className="p-6">
+                <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-4">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-600">
+                    <circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" />
+                  </svg>
+                </div>
+
+                <h2 className="text-lg font-bold text-text text-center">Confirm Bike Ride</h2>
+                <p className="text-xs text-gray-400 text-center mt-1">Review your ride details below</p>
+
+                <div className="mt-5 space-y-3">
+                  <div className="flex items-start gap-3 bg-gray-50 rounded-xl p-3.5">
+                    <div className="w-8 h-8 rounded-full bg-primary-50 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-primary-500">
+                        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Pickup</p>
+                      <p className="text-sm text-text mt-0.5 line-clamp-2">{pickup?.address}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-3 bg-gray-50 rounded-xl p-3.5">
+                    <div className="w-8 h-8 rounded-full bg-success-50 flex items-center justify-center shrink-0 mt-0.5">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Destination</p>
+                      <p className="text-sm text-text mt-0.5">{selectedCollege?.short} — {selectedCollege?.name}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between bg-primary-50/50 rounded-xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-600">
+                        <circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" />
+                      </svg>
+                      <span className="text-sm font-medium text-text">Bike fare</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-gray-400">{distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(1)} km`}</span>
+                      <span className="text-base font-bold text-text">₹{bikePrice}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-2">
+                  <button
+                    onClick={handleConfirmRide}
+                    className="w-full bg-primary text-text font-semibold rounded-2xl py-3.5 flex items-center justify-center gap-2 shadow-lg shadow-primary/25"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" />
+                    </svg>
+                    Confirm Ride
+                  </button>
+                  <button
+                    onClick={() => setShowConfirm(false)}
+                    className="w-full py-3 text-sm font-medium text-gray-500 hover:text-text transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
             </motion.div>
           </motion.div>
