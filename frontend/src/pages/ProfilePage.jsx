@@ -8,7 +8,7 @@ import { motion } from 'framer-motion';
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function ProfilePage() {
-  const { user, token, logout, setUser } = useAuth();
+  const { user, token, role, logout, setUser, toggleRole } = useAuth();
 
   const [showVerifyForm, setShowVerifyForm] = useState(false);
   const [verifyForm, setVerifyForm] = useState({
@@ -111,6 +111,49 @@ export default function ProfilePage() {
           ))}
         </div>
 
+        {/* Role Switcher */}
+        <div className="card">
+          <h3 className="font-semibold text-text mb-3">I want to...</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => role !== 'user' && toggleRole()}
+              className={`rounded-xl p-4 border-2 transition-all text-left ${
+                role === 'user'
+                  ? 'border-primary bg-primary-50'
+                  : 'border-border bg-white hover:bg-gray-50'
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
+                role === 'user' ? 'bg-primary' : 'bg-gray-100'
+              }`}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={role === 'user' ? '#292928' : '#9CA3AF'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" />
+                </svg>
+              </div>
+              <p className={`text-sm font-semibold ${role === 'user' ? 'text-text' : 'text-gray-500'}`}>Book Rides</p>
+              <p className="text-xs text-gray-400 mt-0.5">Find rides to college</p>
+            </button>
+            <button
+              onClick={() => role !== 'rider' && toggleRole()}
+              className={`rounded-xl p-4 border-2 transition-all text-left ${
+                role === 'rider'
+                  ? 'border-primary bg-primary-50'
+                  : 'border-border bg-white hover:bg-gray-50'
+              }`}
+            >
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center mb-2 ${
+                role === 'rider' ? 'bg-primary' : 'bg-gray-100'
+              }`}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={role === 'rider' ? '#292928' : '#9CA3AF'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+              </div>
+              <p className={`text-sm font-semibold ${role === 'rider' ? 'text-text' : 'text-gray-500'}`}>Drive & Earn</p>
+              <p className="text-xs text-gray-400 mt-0.5">Offer rides to students</p>
+            </button>
+          </div>
+        </div>
+
         {/* Info Card */}
         <div className="card space-y-4">
           <h3 className="font-semibold text-text">Account Info</h3>
@@ -132,8 +175,22 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* College Verification Section */}
-        {!isVerified ? (
+        {/* College Verification Section — only for students */}
+        {role === 'rider' ? null : isVerified ? (
+          <div className="card bg-success/5 border border-success/20">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center shrink-0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="#22C55E">
+                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-semibold text-text text-sm">College Verified</h3>
+                <p className="text-xs text-gray-500">You're getting student pricing on all rides.</p>
+              </div>
+            </div>
+          </div>
+        ) : (
           <div className="card space-y-4 border-2 border-primary/20">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
@@ -217,20 +274,6 @@ export default function ProfilePage() {
                 </div>
               </form>
             )}
-          </div>
-        ) : (
-          <div className="card bg-success/5 border border-success/20">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-success/10 flex items-center justify-center shrink-0">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#22C55E">
-                  <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-                </svg>
-              </div>
-              <div>
-                <h3 className="font-semibold text-text text-sm">College Verified</h3>
-                <p className="text-xs text-gray-500">You're getting student pricing on all rides.</p>
-              </div>
-            </div>
           </div>
         )}
 

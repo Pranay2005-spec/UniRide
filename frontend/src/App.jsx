@@ -6,6 +6,9 @@ import OtpVerification from './pages/OtpVerification';
 import CompleteProfile from './pages/CompleteProfile';
 import Home from './pages/Home';
 import Rides from './pages/Rides';
+import OfferRide from './pages/OfferRide';
+import RiderDashboard from './pages/RiderDashboard';
+import RiderRide from './pages/RiderRide';
 import ProfilePage from './pages/ProfilePage';
 import LoadingSkeleton from './components/LoadingSkeleton';
 
@@ -59,6 +62,15 @@ export default function App() {
           } />
           <Route path="/app/rides" element={
             <ProtectedRoute><AppLayout><Rides /></AppLayout></ProtectedRoute>
+          } />
+          <Route path="/app/offer-ride" element={
+            <ProtectedRoute><AppLayout><OfferRide /></AppLayout></ProtectedRoute>
+          } />
+          <Route path="/app/rider-dashboard" element={
+            <ProtectedRoute><AppLayout><RiderDashboard /></AppLayout></ProtectedRoute>
+          } />
+          <Route path="/app/rider-ride" element={
+            <ProtectedRoute><AppLayout><RiderRide /></AppLayout></ProtectedRoute>
           } />
           <Route path="/app/profile" element={
             <ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>

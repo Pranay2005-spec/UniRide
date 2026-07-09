@@ -8,9 +8,16 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(localStorage.getItem('token'));
+  const [role, setRole] = useState(localStorage.getItem('role') || 'user');
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
+
+  function toggleRole() {
+    const next = role === 'rider' ? 'user' : 'rider';
+    setRole(next);
+    localStorage.setItem('role', next);
+  }
 
   useEffect(() => {
     if (token) {
@@ -97,9 +104,9 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider value={{
-      user, token, loading,
+      user, token, role, loading,
       sendOtp, verifyOtp, completeProfile, updateProfile, logout,
-      setUser,
+      setUser, toggleRole, setRole,
     }}>
       {children}
     </AuthContext.Provider>
