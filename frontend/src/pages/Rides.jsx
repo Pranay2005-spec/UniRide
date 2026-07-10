@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+import { useSocket } from '../context/SocketContext';
 
 const cancelReasons = [
   { key: 'long_wait', label: 'Taking too long', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg> },
@@ -30,7 +29,8 @@ function getTileUrl(lat, lng, zoom = 14) {
 }
 
 export default function Rides() {
-  const { token, role } = useAuth();
+  const { token, role, user } = useAuth();
+  const { emit, on, connected } = useSocket();
   const navState = useLocation().state;
   const navigate = useNavigate();
   const requestedRef = useRef(false);
@@ -54,14 +54,19 @@ export default function Rides() {
   });
   const [showCancel, setShowCancel] = useState(false);
   const [rideDetails, setRideDetails] = useState(null);
+  const [verified, setVerified] = useState(() => {
+    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.verified) return p.verified; } } catch {}
+    return false;
+  });
   const [redirecting, setRedirecting] = useState(false);
+  const [requestError, setRequestError] = useState('');
 
   // Persist state to sessionStorage
   useEffect(() => {
     if (matchedRide || college) {
-      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup }));
+      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup, verified }));
     }
-  }, [matchedRide, otp, college, pickup]);
+  }, [matchedRide, otp, college, pickup, verified]);
 
   function clearPersistedState() {
     sessionStorage.removeItem('ur_ride');
@@ -86,73 +91,78 @@ export default function Rides() {
     return () => clearInterval(interval);
   }, [college, pickup]);
 
-  // Create ride request on mount, poll for match
+  // Create ride request via socket, listen for match
   useEffect(() => {
-    if (!college?.id || !pickup || !token || matchedRide) return;
+    if (!college?.id || !pickup || !connected || matchedRide) return;
+    if (requestedRef.current) return;
+    requestedRef.current = true;
 
-    async function createRequest() {
-      if (requestedRef.current) return;
-      requestedRef.current = true;
-      try {
-        await fetch(`${API}/rides/request`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ college, pickup }),
-        });
-      } catch {}
-    }
+    emit('requestRide', { college, pickup });
 
-    createRequest();
+    const unsubError = on('error', (data) => {
+      setRequestError(data.message || 'Failed to request ride');
+    });
 
-    const poll = async () => {
-      try {
-        const res = await fetch(`${API}/rides/my-match`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.success && data.matched) {
-          setMatchedRide(data.ride._id);
-          setOtp(data.otp);
-          setRideDetails(data.ride);
-        }
-      } catch {}
+    const unsubMatched = on('matched', (data) => {
+      setMatchedRide(data.ride._id);
+      setOtp(data.otp);
+      setRideDetails(data.ride);
+    });
+
+    return () => {
+      unsubError();
+      unsubMatched();
     };
+  }, [college?.id, pickup?.address, connected, matchedRide]);
 
-    poll();
-    const timer = setInterval(poll, 3000);
-    return () => clearInterval(timer);
-  }, [college?.id, pickup?.address, token, matchedRide]);
+  // Cancel pending request on unmount only (if not matched)
+  const wasMatched = useRef(false);
+  wasMatched.current = matchedRide;
+  useEffect(() => {
+    return () => {
+      if (!wasMatched.current) {
+        emit('cancelRequest');
+      }
+    };
+  }, []);
 
-  async function handleCancel(reason) {
+  function handleCancel(reason) {
     setShowCancel(false);
-    try {
-      await fetch(`${API}/rides/request`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch {}
+    emit('cancelRequest');
     clearPersistedState();
     setMatchedRide(null);
     setOtp(null);
     navigate('/app/home');
   }
 
-  // After matching, poll for ride details (driver info + location)
+  // After matching, listen for rider location and share passenger location
   useEffect(() => {
-    if (!matchedRide || !token) return;
-    const poll = async () => {
-      try {
-        const res = await fetch(`${API}/rides/${matchedRide}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.success) setRideDetails(data.ride);
-      } catch {}
+    if (!matchedRide || !connected) return;
+
+    emit('joinRideRoom', matchedRide);
+
+    const unsubRiderLoc = on('riderLocation', (data) => {
+      setRideDetails(prev => prev ? { ...prev, currentLocation: { lat: data.lat, lng: data.lng } } : prev);
+    });
+
+    const sendLoc = () => {
+      if (!navigator.geolocation) return;
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          emit('updateLocation', { rideId: matchedRide, lat: pos.coords.latitude, lng: pos.coords.longitude });
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
     };
-    poll();
-    const timer = setInterval(poll, 3000);
-    return () => clearInterval(timer);
-  }, [matchedRide, token]);
+    sendLoc();
+    const locTimer = setInterval(sendLoc, 5000);
+
+    return () => {
+      unsubRiderLoc();
+      clearInterval(locTimer);
+    };
+  }, [matchedRide, connected]);
 
   const driver = rideDetails?.driver;
   const driverPos = rideDetails?.currentLocation?.lat != null
@@ -299,8 +309,27 @@ export default function Rides() {
               </div>
               <p className="text-base font-bold text-text">{driver?.name || 'Rider'}</p>
               <p className="text-sm text-green-700 font-medium mt-1">₹30 fare</p>
-              <p className="text-3xl font-bold text-primary mt-3 tracking-widest">{otp || '----'}</p>
-              <p className="text-xs text-gray-500 mt-1">Show this OTP to the rider</p>
+              {verified ? (
+                <div className="mt-2 inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                  Verified by Rider
+                </div>
+              ) : (
+                <>
+                  <p className="text-3xl font-bold text-primary mt-3 tracking-widest">{otp || '----'}</p>
+                  <p className="text-xs text-gray-500 mt-1">Show this OTP to the rider when they arrive</p>
+                </>
+              )}
+            </div>
+          ) : requestError ? (
+            <div className="text-center py-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
+              </div>
+              <p className="text-sm text-red-500 mb-3">{requestError}</p>
+              <button onClick={() => { setRequestError(''); requestedRef.current = false; }} className="btn-primary !py-2.5 !text-sm">
+                Try Again
+              </button>
             </div>
           ) : (
             <>

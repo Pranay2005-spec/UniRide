@@ -27,7 +27,7 @@ export function useSavedRoutes() {
     const route = {
       id: Date.now().toString(),
       pickup: { position: pickup.position, address: pickup.address },
-      college: { id: college.id, name: college.name, short: college.short },
+      college: { id: college.id, name: college.name, short: college.short, lat: college.lat, lng: college.lng },
     };
     persist([route, ...routes]);
     return true;

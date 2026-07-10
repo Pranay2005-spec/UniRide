@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
 import BottomNav from './components/BottomNav';
 import Welcome from './pages/Welcome';
 import OtpVerification from './pages/OtpVerification';
@@ -51,32 +52,34 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          <Route path="/" element={<AuthRedirect />} />
-          <Route path="/otp" element={<OtpVerification />} />
-          <Route path="/complete-profile" element={
-            <ProtectedRoute><CompleteProfile /></ProtectedRoute>
-          } />
-          <Route path="/app/home" element={
-            <ProtectedRoute><AppLayout><Home /></AppLayout></ProtectedRoute>
-          } />
-          <Route path="/app/rides" element={
-            <ProtectedRoute><AppLayout><Rides /></AppLayout></ProtectedRoute>
-          } />
-          <Route path="/app/offer-ride" element={
-            <ProtectedRoute><AppLayout><OfferRide /></AppLayout></ProtectedRoute>
-          } />
-          <Route path="/app/rider-dashboard" element={
-            <ProtectedRoute><AppLayout><RiderDashboard /></AppLayout></ProtectedRoute>
-          } />
-          <Route path="/app/rider-ride" element={
-            <ProtectedRoute><AppLayout><RiderRide /></AppLayout></ProtectedRoute>
-          } />
-          <Route path="/app/profile" element={
-            <ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>
-          } />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <SocketProvider>
+          <Routes>
+            <Route path="/" element={<AuthRedirect />} />
+            <Route path="/otp" element={<OtpVerification />} />
+            <Route path="/complete-profile" element={
+              <ProtectedRoute><CompleteProfile /></ProtectedRoute>
+            } />
+            <Route path="/app/home" element={
+              <ProtectedRoute><AppLayout><Home /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/rides" element={
+              <ProtectedRoute><AppLayout><Rides /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/offer-ride" element={
+              <ProtectedRoute><AppLayout><OfferRide /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/rider-dashboard" element={
+              <ProtectedRoute><AppLayout><RiderDashboard /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/rider-ride" element={
+              <ProtectedRoute><AppLayout><RiderRide /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/profile" element={
+              <ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </SocketProvider>
       </AuthProvider>
     </BrowserRouter>
   );

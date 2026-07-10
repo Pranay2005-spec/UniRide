@@ -86,9 +86,9 @@ exports.joinRide = async (req, res) => {
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
     if (ride.status !== 'active') return res.status(400).json({ error: 'Ride not active' });
     if (ride.passengers.length >= ride.seats) return res.status(400).json({ error: 'No seats available' });
-    if (ride.driver.toString() === req.userId) return res.status(400).json({ error: 'Cannot join your own ride' });
+    if (ride.driver.toString() === req.userId.toString()) return res.status(400).json({ error: 'Cannot join your own ride' });
 
-    const alreadyJoined = ride.passengers.find(p => p.user.toString() === req.userId);
+    const alreadyJoined = ride.passengers.find(p => p.user.toString() === req.userId.toString());
     if (alreadyJoined) return res.status(400).json({ error: 'Already joined this ride' });
 
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -107,7 +107,7 @@ exports.startRide = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id);
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
-    if (ride.driver.toString() !== req.userId) return res.status(403).json({ error: 'Not your ride' });
+    if (ride.driver.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
 
     ride.active = true;
     ride.currentStop = 1;
@@ -124,7 +124,7 @@ exports.updateStop = async (req, res) => {
     const { stop } = req.body;
     const ride = await Ride.findById(req.params.id);
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
-    if (ride.driver.toString() !== req.userId) return res.status(403).json({ error: 'Not your ride' });
+    if (ride.driver.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
 
     ride.currentStop = stop;
     if (stop >= ride.route.length) {
@@ -175,7 +175,7 @@ exports.getPassengers = async (req, res) => {
     const ride = await Ride.findById(req.params.id)
       .populate('passengers.user', 'name collegeName phone profilePicture');
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
-    if (ride.driver.toString() !== req.userId) return res.status(403).json({ error: 'Not your ride' });
+    if (ride.driver.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
 
     res.json({ success: true, passengers: ride.passengers });
   } catch (error) {
@@ -198,7 +198,7 @@ exports.getRideById = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id)
       .populate('driver', 'name collegeName profilePicture')
-      .populate('passengers.user', 'name');
+      .populate('passengers.user', 'name collegeName profilePicture');
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
     const isDriver = ride.driver._id.toString() === req.userId.toString();
     const isPassenger = ride.passengers.some(p => p.user._id.toString() === req.userId.toString());
@@ -214,10 +214,70 @@ exports.updateLocation = async (req, res) => {
     const { lat, lng } = req.body;
     const ride = await Ride.findById(req.params.id);
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
-    if (ride.driver.toString() !== req.userId) return res.status(403).json({ error: 'Not your ride' });
+    if (ride.driver.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
     ride.currentLocation = { lat, lng };
     await ride.save();
     res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Passenger updates their location in the ride
+exports.updatePassengerLocation = async (req, res) => {
+  try {
+    const { lat, lng } = req.body;
+    const ride = await Ride.findById(req.params.id);
+    if (!ride) return res.status(404).json({ error: 'Ride not found' });
+
+    const passenger = ride.passengers.find(p => p.user.toString() === req.userId.toString());
+    if (!passenger) return res.status(403).json({ error: 'You are not a passenger in this ride' });
+
+    passenger.location = { lat, lng };
+    await ride.save();
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Rider verifies passenger OTP when within 10m radius
+exports.verifyPassengerOtp = async (req, res) => {
+  try {
+    const { passengerId, otp } = req.body;
+    const ride = await Ride.findById(req.params.id);
+    if (!ride) return res.status(404).json({ error: 'Ride not found' });
+    if (ride.driver.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
+
+    const passenger = ride.passengers.find(
+      p => p.user.toString() === passengerId
+    );
+    if (!passenger) return res.status(404).json({ error: 'Passenger not found in this ride' });
+
+    if (passenger.verified) return res.status(400).json({ error: 'Passenger already verified' });
+
+    if (passenger.otp !== otp) return res.status(400).json({ error: 'Incorrect OTP' });
+
+    // Check proximity (10 meters)
+    if (ride.currentLocation && passenger.location) {
+      const R = 6371000;
+      const dLat = (passenger.location.lat - ride.currentLocation.lat) * Math.PI / 180;
+      const dLng = (passenger.location.lng - ride.currentLocation.lng) * Math.PI / 180;
+      const a = Math.sin(dLat/2)**2 +
+                Math.cos(ride.currentLocation.lat * Math.PI / 180) *
+                Math.cos(passenger.location.lat * Math.PI / 180) *
+                Math.sin(dLng/2)**2;
+      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      if (dist > 10) {
+        return res.status(400).json({ error: `Too far (${Math.round(dist)}m). Must be within 10m.` });
+      }
+    }
+
+    passenger.verified = true;
+    await ride.save();
+
+    res.json({ success: true, message: 'Passenger verified' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -227,7 +287,7 @@ exports.deactivateRide = async (req, res) => {
   try {
     const ride = await Ride.findById(req.params.id);
     if (!ride) return res.status(404).json({ error: 'Ride not found' });
-    if (ride.driver.toString() !== req.userId) return res.status(403).json({ error: 'Not your ride' });
+    if (ride.driver.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
     ride.active = false;
     ride.status = 'cancelled';
     await ride.save();
@@ -255,9 +315,16 @@ exports.requestRide = async (req, res) => {
   try {
     const { college, pickup } = req.body;
 
-    // Cancel any existing pending requests for this passenger
+    if (!college || !college.id) {
+      return res.status(400).json({ error: 'College information is required' });
+    }
+    if (!pickup || !pickup.address || !pickup.position) {
+      return res.status(400).json({ error: 'Pickup location is required' });
+    }
+
+    // Cancel any existing pending or accepted requests for this passenger
     await RideRequest.updateMany(
-      { passenger: req.userId, status: 'pending' },
+      { passenger: req.userId, status: { $in: ['pending', 'accepted'] } },
       { status: 'cancelled' }
     );
 
@@ -289,6 +356,14 @@ exports.checkMatch = async (req, res) => {
     }
 
     const ride = request.matchedRide;
+    if (!ride || !ride.active) {
+      if (ride) {
+        request.status = 'cancelled';
+        await request.save();
+      }
+      return res.json({ success: true, matched: false });
+    }
+
     const otpEntry = ride.passengers.find(
       p => p.user.toString() === req.userId.toString()
     );
@@ -303,20 +378,29 @@ exports.checkMatch = async (req, res) => {
         price: ride.price,
       },
       otp: otpEntry?.otp || null,
+      verified: otpEntry?.verified || false,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Rider sees waiting passengers for a college
+// Rider sees waiting passengers for a college (only recent requests)
 exports.getWaitingPassengers = async (req, res) => {
   try {
     const { collegeId } = req.query;
+    const cutoff = new Date(Date.now() - 30 * 1000);
+
+    // Clean up any stale pending requests older than 30 seconds
+    await RideRequest.updateMany(
+      { 'college.id': Number(collegeId), status: 'pending', createdAt: { $lt: cutoff } },
+      { status: 'cancelled' }
+    );
 
     const requests = await RideRequest.find({
       'college.id': Number(collegeId),
       status: 'pending',
+      createdAt: { $gte: cutoff },
     }).populate('passenger', 'name collegeName profilePicture');
 
     res.json({ success: true, passengers: requests });

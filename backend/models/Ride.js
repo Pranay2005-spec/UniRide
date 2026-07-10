@@ -5,8 +5,8 @@ const routeStopSchema = new mongoose.Schema({
     id: { type: Number, required: true },
     name: { type: String, required: true },
     short: { type: String, required: true },
-    lat: { type: Number, required: true },
-    lng: { type: Number, required: true },
+    lat: Number,
+    lng: Number,
   },
   order: { type: Number, required: true },
 }, { _id: false });
@@ -31,6 +31,11 @@ const rideSchema = new mongoose.Schema({
     user: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     joinedAt: { type: Date, default: Date.now },
     otp: { type: String },
+    location: {
+      lat: { type: Number },
+      lng: { type: Number },
+    },
+    verified: { type: Boolean, default: false },
   }],
   currentLocation: {
     lat: { type: Number },

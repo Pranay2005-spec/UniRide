@@ -7,8 +7,8 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [role, setRole] = useState(localStorage.getItem('role') || 'user');
+  const [token, setToken] = useState(sessionStorage.getItem('token'));
+  const [role, setRole] = useState(sessionStorage.getItem('role') || 'user');
   const [loading, setLoading] = useState(true);
 
   const navigate = useNavigate();
@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
   function toggleRole() {
     const next = role === 'rider' ? 'user' : 'rider';
     setRole(next);
-    localStorage.setItem('role', next);
+    sessionStorage.setItem('role', next);
   }
 
   useEffect(() => {
@@ -63,7 +63,7 @@ export function AuthProvider({ children }) {
     const data = await res.json();
     if (data.success) {
       setToken(data.token);
-      localStorage.setItem('token', data.token);
+      sessionStorage.setItem('token', data.token);
       setUser(data.user);
     }
     return data;
@@ -98,7 +98,7 @@ export function AuthProvider({ children }) {
   function logout() {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
+    sessionStorage.removeItem('token');
     navigate('/');
   }
 

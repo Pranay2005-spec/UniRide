@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
+import { useSocket } from '../context/SocketContext';
 import colleges from '../data/solapurColleges';
-
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 const messages = [
   'Finding students heading your way...',
@@ -28,44 +27,77 @@ const STORAGE_KEY = 'ur_rider_ride';
 
 export default function RiderRide() {
   const { token, user } = useAuth();
+  const { emit, on, connected } = useSocket();
   const navigate = useNavigate();
 
   const [step, setStep] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.step) { if (p.step === 'waiting' || p.step === 'found' || p.step === 'confirmed') return 'searching'; return p.step; } } } catch {}
+    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp) return 'confirmed'; } } catch {}
     return 'pick';
   });
   const [selectedCollege, setSelectedCollege] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.selectedCollege) return p.selectedCollege; } } catch {}
+    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp && p.selectedCollege) return p.selectedCollege; } } catch {}
     return null;
   });
   const [showCollegeSearch, setShowCollegeSearch] = useState(false);
   const [query, setQuery] = useState('');
-  const [waitingPassengers, setWaitingPassengers] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.waitingPassengers) return p.waitingPassengers; } } catch {}
-    return [];
-  });
+  const [waitingPassengers, setWaitingPassengers] = useState([]);
   const [msgIndex, setMsgIndex] = useState(0);
   const [rideId, setRideId] = useState(() => {
     try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId) return p.rideId; } } catch {}
     return null;
   });
   const [acceptedPassenger, setAcceptedPassenger] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.acceptedPassenger) return p.acceptedPassenger; } } catch {}
+    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp && p.acceptedPassenger) return p.acceptedPassenger; } } catch {}
     return null;
   });
   const [otp, setOtp] = useState(() => {
     try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.otp) return p.otp; } } catch {}
     return null;
   });
+  const [rideDetails, setRideDetails] = useState(null);
+  const [verifyMsg, setVerifyMsg] = useState('');
 
-  // Persist state
+  // Persist active ride state across page refreshes
   useEffect(() => {
-    if (step !== 'pick') {
+    if (rideId && otp) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        step, selectedCollege, rideId, waitingPassengers, acceptedPassenger, otp,
+        step: 'confirmed', selectedCollege, rideId, acceptedPassenger, otp,
       }));
+    } else if (step === 'pick') {
+      sessionStorage.removeItem(STORAGE_KEY);
     }
-  }, [step, selectedCollege, rideId, waitingPassengers, acceptedPassenger, otp]);
+  }, [step, selectedCollege, rideId, acceptedPassenger, otp]);
+
+  function calcDistance(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // After accepting, listen for passenger location via socket
+  useEffect(() => {
+    if (!rideId || !connected) return;
+
+    emit('joinRideRoom', rideId);
+
+    const unsubPassLoc = on('passengerLocation', (data) => {
+      setRideDetails(prev => {
+        if (!prev) return prev;
+        const passengers = [...(prev.passengers || [])];
+        const idx = passengers.findIndex(p => (p.user?._id || p.user) === data.userId);
+        if (idx >= 0) {
+          passengers[idx] = { ...passengers[idx], location: { lat: data.lat, lng: data.lng } };
+        }
+        return { ...prev, passengers };
+      });
+    });
+
+    return () => {
+      unsubPassLoc();
+    };
+  }, [rideId, connected]);
 
   function clearPersistedState() {
     sessionStorage.removeItem(STORAGE_KEY);
@@ -78,26 +110,39 @@ export default function RiderRide() {
       ).slice(0, 8)
     : [];
 
-  // Poll for waiting passengers — only after rider clicks "Find Riders"
+  // Listen for waiting passengers via socket — only after rider clicks "Find Riders"
   useEffect(() => {
-    if (step !== 'searching' || !selectedCollege) return;
+    if (step !== 'searching' || !selectedCollege || !connected) return;
 
-    const poll = async () => {
-      try {
-        const res = await fetch(`${API}/rides/waiting-passengers?collegeId=${selectedCollege.id}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (data.success) {
-          setWaitingPassengers(data.passengers);
-        }
-      } catch {}
+    emit('findRiders', selectedCollege.id);
+
+    const unsubWaiting = on('waitingPassengers', (requests) => {
+      setWaitingPassengers(requests);
+    });
+
+    const unsubNew = on('newPassenger', (request) => {
+      setWaitingPassengers(prev => {
+        if (prev.some(p => p._id === request._id)) return prev;
+        return [...prev, request];
+      });
+    });
+
+    const unsubCancelled = on('passengerCancelled', (data) => {
+      setWaitingPassengers(prev => prev.filter(p => p.passenger?._id !== data.passengerId));
+    });
+
+    const unsubAccepted = on('passengerAccepted', (data) => {
+      setWaitingPassengers(prev => prev.filter(p => p._id !== data.requestId));
+    });
+
+    return () => {
+      unsubWaiting();
+      unsubNew();
+      unsubCancelled();
+      unsubAccepted();
+      emit('stopFindRiders', selectedCollege.id);
     };
-
-    poll();
-    const timer = setInterval(poll, 3000);
-    return () => clearInterval(timer);
-  }, [step, selectedCollege, token]);
+  }, [step, selectedCollege, connected]);
 
   // Message rotation while searching
   useEffect(() => {
@@ -108,20 +153,19 @@ export default function RiderRide() {
     return () => clearInterval(interval);
   }, [step]);
 
-  // After accepting, send live location
+  const [riderPos, setRiderPos] = useState(null);
+
+  // After accepting, send live location via socket
   useEffect(() => {
-    if (!rideId || !otp) return;
-    const sendLoc = async () => {
+    if (!rideId || !otp || !connected) return;
+    const sendLoc = () => {
       if (!navigator.geolocation) return;
       navigator.geolocation.getCurrentPosition(
-        async (pos) => {
-          try {
-            await fetch(`${API}/rides/${rideId}/location`, {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-              body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-            });
-          } catch {}
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setRiderPos({ lat, lng });
+          emit('updateLocation', { rideId, lat, lng });
         },
         () => {},
         { enableHighAccuracy: true, timeout: 10000 }
@@ -130,7 +174,7 @@ export default function RiderRide() {
     sendLoc();
     const timer = setInterval(sendLoc, 5000);
     return () => clearInterval(timer);
-  }, [rideId, otp, token]);
+  }, [rideId, otp, connected]);
 
   async function handleFindRiders() {
     if (!selectedCollege) return;
@@ -138,24 +182,49 @@ export default function RiderRide() {
     setWaitingPassengers([]);
   }
 
-  async function handleConfirmRide(requestId, passengerData) {
+  function handleConfirmRide(requestId, passengerData) {
+    emit('acceptRequest', requestId);
+    const unsubError = on('error', (data) => {
+      setVerifyMsg(data.message || 'Failed to accept request');
+      unsubError();
+    });
+    const unsubAccepted = on('requestAccepted', (data) => {
+      setRideId(data.ride._id);
+      setAcceptedPassenger(passengerData);
+      setOtp(data.otp);
+      unsubAccepted();
+    });
+  }
+
+  async function handleVerifyOtp() {
+    if (!rideId || !acceptedPassenger) return;
+    const otpInput = prompt('Enter the OTP shown by the passenger:');
+    if (!otpInput) return;
     try {
-      const res = await fetch(`${API}/rides/accept-request/${requestId}`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${rideId}/verify-passenger`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ passengerId: acceptedPassenger._id, otp: otpInput }),
       });
       const data = await res.json();
       if (data.success) {
-        setRideId(data.ride._id);
-        setAcceptedPassenger(passengerData);
-        setOtp(data.otp);
+        setVerifyMsg('Passenger verified successfully!');
+      } else {
+        setVerifyMsg(data.error || 'Verification failed');
       }
-    } catch {}
+    } catch {
+      setVerifyMsg('Network error');
+    }
   }
 
-  async function handleDone() {
+  function handleDone() {
+    if (step === 'searching' && selectedCollege) {
+      emit('stopFindRiders', selectedCollege.id);
+    }
     if (rideId) {
-      try { await fetch(`${API}/rides/${rideId}/deactivate`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}` } }); } catch {}
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${rideId}/deactivate`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => {});
     }
     clearPersistedState();
     setStep('pick');
@@ -166,6 +235,9 @@ export default function RiderRide() {
     setShowCollegeSearch(false);
     setQuery('');
     setWaitingPassengers([]);
+    setRideDetails(null);
+    setVerifyMsg('');
+    setRiderPos(null);
   }
 
   const destPos = selectedCollege ? [selectedCollege.lat, selectedCollege.lng] : null;
@@ -392,16 +464,61 @@ export default function RiderRide() {
               )}
 
               {otp && acceptedPassenger && (
-                <div className="bg-primary-50 rounded-xl p-4 border border-primary text-center">
-                  <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 flex items-center justify-center text-text font-bold text-xl">
-                    {acceptedPassenger.name?.[0] || '?'}
+                <div>
+                  {/* Passenger on the map marker */}
+                  {rideDetails?.passengers?.[0]?.location?.lat && (
+                    <div className="text-xs text-gray-500 mb-2 text-center">
+                      Passenger location received
+                    </div>
+                  )}
+
+                  <div className="bg-primary-50 rounded-xl p-4 border border-primary text-center">
+                    <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 flex items-center justify-center text-text font-bold text-xl">
+                      {acceptedPassenger.name?.[0] || '?'}
+                    </div>
+                    <p className="text-base font-bold text-text mb-1">{acceptedPassenger.name || 'Student'}</p>
+
+                    {/* Distance indicator */}
+                    {rideDetails?.passengers?.[0]?.location?.lat && riderPos && (
+                      <div className="text-sm mb-2">
+                        {(() => {
+                          const pl = rideDetails.passengers[0].location;
+                          const dist = calcDistance(riderPos.lat, riderPos.lng, pl.lat, pl.lng);
+                          const color = dist <= 10 ? 'text-green-600' : 'text-orange-500';
+                          return <span className={`font-medium ${color}`}>{Math.round(dist)}m away</span>;
+                        })()}
+                      </div>
+                    )}
+
+                    {/* OTP display */}
+                    {rideDetails?.passengers?.find(p => p.user?._id === acceptedPassenger._id)?.verified ? (
+                      <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                        Verified
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-500 mb-3">Ask the passenger for their OTP</p>
+                        <button
+                          onClick={handleVerifyOtp}
+                          disabled={!rideDetails?.passengers?.[0]?.location?.lat}
+                          className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Verify OTP
+                        </button>
+                      </>
+                    )}
+
+                    {verifyMsg && (
+                      <p className={`text-sm mt-2 ${verifyMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>
+                        {verifyMsg}
+                      </p>
+                    )}
+
+                    <button onClick={handleDone} className="mt-3 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                      End Ride
+                    </button>
                   </div>
-                  <p className="text-base font-bold text-text mb-1">{acceptedPassenger.name || 'Student'}</p>
-                  <p className="text-3xl font-bold text-primary mt-2 tracking-widest">{otp || '----'}</p>
-                  <p className="text-xs text-gray-500 mt-1">Share this OTP with the passenger to verify</p>
-                  <button onClick={handleDone} className="mt-4 py-2.5 px-6 rounded-xl bg-primary text-text font-semibold text-sm">
-                    Done
-                  </button>
                 </div>
               )}
             </motion.div>
