@@ -134,12 +134,19 @@ function setupSocketHandlers(io) {
             driver: driverUser,
             currentLocation: ride.currentLocation,
             price: ride.price,
+            pickup: ride.pickup,
+            route: ride.route,
           },
           otp,
         });
 
-        // Confirm to the rider
-        socket.emit('requestAccepted', { ride: ride.toObject(), otp, passenger: request.passenger });
+        // Confirm to the rider with pickup location
+        socket.emit('requestAccepted', {
+          ride: ride.toObject(),
+          otp,
+          passenger: request.passenger,
+          pickup: request.pickup,
+        });
 
         // Remove from waiting list
         io.to(`college:${request.college.id}`).emit('passengerAccepted', { requestId: request._id });

@@ -277,6 +277,13 @@ exports.verifyPassengerOtp = async (req, res) => {
     passenger.verified = true;
     await ride.save();
 
+    // Notify the passenger via socket that they've been verified
+    if (global.io) {
+      global.io.to(`user:${passengerId}`).emit('passengerVerified', {
+        rideId: ride._id,
+      });
+    }
+
     res.json({ success: true, message: 'Passenger verified' });
   } catch (error) {
     res.status(500).json({ error: error.message });

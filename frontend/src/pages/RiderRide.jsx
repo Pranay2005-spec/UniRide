@@ -54,19 +54,26 @@ export default function RiderRide() {
     try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.otp) return p.otp; } } catch {}
     return null;
   });
-  const [rideDetails, setRideDetails] = useState(null);
+  const [rideDetails, setRideDetails] = useState(() => {
+    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideDetails) return p.rideDetails; } } catch {}
+    return null;
+  });
+  const [pickupPos, setPickupPos] = useState(() => {
+    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.pickupPos) return p.pickupPos; } } catch {}
+    return null;
+  });
   const [verifyMsg, setVerifyMsg] = useState('');
 
   // Persist active ride state across page refreshes
   useEffect(() => {
     if (rideId && otp) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        step: 'confirmed', selectedCollege, rideId, acceptedPassenger, otp,
+        step: 'confirmed', selectedCollege, rideId, acceptedPassenger, otp, rideDetails, pickupPos,
       }));
     } else if (step === 'pick') {
       sessionStorage.removeItem(STORAGE_KEY);
     }
-  }, [step, selectedCollege, rideId, acceptedPassenger, otp]);
+  }, [step, selectedCollege, rideId, acceptedPassenger, otp, rideDetails, pickupPos]);
 
   function calcDistance(lat1, lng1, lat2, lng2) {
     const R = 6371000;
@@ -182,18 +189,26 @@ export default function RiderRide() {
     setWaitingPassengers([]);
   }
 
-  function handleConfirmRide(requestId, passengerData) {
-    emit('acceptRequest', requestId);
+  function handleConfirmRide(requestId, passengerData, passengerPickup) {
+    setVerifyMsg('');
+    let cleanup = () => {};
     const unsubError = on('error', (data) => {
       setVerifyMsg(data.message || 'Failed to accept request');
-      unsubError();
+      cleanup();
     });
     const unsubAccepted = on('requestAccepted', (data) => {
       setRideId(data.ride._id);
       setAcceptedPassenger(passengerData);
       setOtp(data.otp);
-      unsubAccepted();
+      setRideDetails(data.ride);
+      const pickup = data.pickup || passengerPickup;
+      if (pickup?.position) {
+        setPickupPos(pickup.position);
+      }
+      cleanup();
     });
+    cleanup = () => { unsubError(); unsubAccepted(); };
+    emit('acceptRequest', requestId);
   }
 
   async function handleVerifyOtp() {
@@ -236,11 +251,17 @@ export default function RiderRide() {
     setQuery('');
     setWaitingPassengers([]);
     setRideDetails(null);
+    setPickupPos(null);
     setVerifyMsg('');
     setRiderPos(null);
   }
 
   const destPos = selectedCollege ? [selectedCollege.lat, selectedCollege.lng] : null;
+  const isVerified = rideDetails?.passengers?.find(p => {
+    const pid = p.user?._id || p.user;
+    return pid === acceptedPassenger?._id;
+  })?.verified;
+  const passengerLoc = rideDetails?.passengers?.[0]?.location;
 
   return (
     <div className="pb-20 relative">
@@ -343,31 +364,63 @@ export default function RiderRide() {
               <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
             </div>
 
-            <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
-              <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
-              <path d="M40 340 Q200 280 360 60" stroke="#22C55E" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" transform="translate(0, 4)" />
-              <circle cx="40" cy="340" r="8" fill="#c3f832" stroke="#292928" strokeWidth="2" />
-              <circle cx="360" cy="60" r="8" fill="#22C55E" stroke="#292928" strokeWidth="2" />
-              <circle cx="40" cy="340" r="14" fill="none" stroke="#c3f832" strokeWidth="2" opacity="0.5">
-                <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="360" cy="60" r="14" fill="none" stroke="#22C55E" strokeWidth="2" opacity="0.5">
-                <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
-              </circle>
-            </svg>
+            {/* Route line: pickup -> college */}
+            {destPos && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
+                <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
+                <path d="M40 340 Q200 280 360 60" stroke="#22C55E" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" transform="translate(0, 4)" />
+                <circle cx="40" cy="340" r="8" fill="#c3f832" stroke="#292928" strokeWidth="2" />
+                <circle cx="360" cy="60" r="8" fill="#22C55E" stroke="#292928" strokeWidth="2" />
+                <circle cx="40" cy="340" r="14" fill="none" stroke="#c3f832" strokeWidth="2" opacity="0.5">
+                  <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+                <circle cx="360" cy="60" r="14" fill="none" stroke="#22C55E" strokeWidth="2" opacity="0.5">
+                  <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
+                </circle>
+              </svg>
+            )}
 
-            <div className="absolute z-[6]" style={{ left: '20%', top: '72%' }}>
-              <motion.div animate={{ scale: [1, 1.8, 1], opacity: [0.7, 0, 0.7] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }} className="w-2.5 h-2.5 rounded-full bg-primary" />
-            </div>
-            <div className="absolute z-[6]" style={{ left: '50%', top: '52%' }}>
-              <motion.div animate={{ scale: [1, 1.8, 1], opacity: [0.7, 0, 0.7] }} transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }} className="w-2 h-2 rounded-full bg-green-400" />
-            </div>
-            <div className="absolute z-[6]" style={{ left: '75%', top: '32%' }}>
-              <motion.div animate={{ scale: [1, 1.8, 1], opacity: [0.7, 0, 0.7] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 1 }} className="w-2 h-2 rounded-full bg-green-400" />
-            </div>
+            {/* Rider location marker */}
+            {riderPos && (
+              <div className="absolute z-10" style={{
+                left: `${((riderPos.lng - destPos[1]) / 0.02 + 50)}%`,
+                top: `${(50 - (riderPos.lat - destPos[0]) / 0.02)}%`,
+              }}>
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+                </div>
+              </div>
+            )}
 
+            {/* Passenger pickup marker */}
+            {pickupPos && !passengerLoc?.lat && (
+              <div className="absolute z-10" style={{
+                left: `${((pickupPos[1] - destPos[1]) / 0.02 + 50)}%`,
+                top: `${(50 - (pickupPos[0] - destPos[0]) / 0.02)}%`,
+              }}>
+                <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                </div>
+                <motion.div className="absolute -bottom-1 -right-1 w-14 h-14 rounded-full bg-orange-400/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+              </div>
+            )}
+
+            {/* Passenger live location marker */}
+            {passengerLoc?.lat && (
+              <div className="absolute z-10" style={{
+                left: `${((passengerLoc.lng - destPos[1]) / 0.02 + 50)}%`,
+                top: `${(50 - (passengerLoc.lat - destPos[0]) / 0.02)}%`,
+              }}>
+                <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                </div>
+                <motion.div className="absolute -bottom-1 -right-1 w-14 h-14 rounded-full bg-orange-400/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+              </div>
+            )}
+
+            {/* Destination marker */}
             <div className="absolute z-[6]" style={{ left: '86%', top: '10%' }}>
               <svg width="32" height="32" viewBox="0 0 200 200" fill="none">
                 <rect x="25" y="75" width="150" height="105" rx="3" stroke="#22C55E" strokeWidth="3" fill="rgba(34,197,94,0.1)" />
@@ -385,22 +438,30 @@ export default function RiderRide() {
               </svg>
             </div>
 
-            <motion.div
-              className="absolute z-10 pointer-events-none"
-              style={{ left: '10%', top: '80%' }}
-              animate={{ left: ['10%', '85%'], top: ['80%', '10%'] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
-            >
-              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
-              </div>
-              <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
-            </motion.div>
+            {/* Animated vehicle moving along route when searching */}
+            {!otp && (
+              <motion.div
+                className="absolute z-10 pointer-events-none"
+                style={{ left: '10%', top: '80%' }}
+                animate={{ left: ['10%', '85%'], top: ['80%', '10%'] }}
+                transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
+              >
+                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+                </div>
+                <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+              </motion.div>
+            )}
 
             <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
           </div>
 
           <div className="px-4 -mt-8 relative z-20">
+            {verifyMsg && !otp && (
+              <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 text-center">
+                {verifyMsg}
+              </motion.div>
+            )}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -450,7 +511,7 @@ export default function RiderRide() {
                         </div>
                       </div>
                       <button
-                        onClick={() => handleConfirmRide(req._id, req.passenger)}
+                        onClick={() => handleConfirmRide(req._id, req.passenger, req.pickup)}
                         className="w-full py-3 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
                       >
                         Confirm Ride
@@ -465,13 +526,20 @@ export default function RiderRide() {
 
               {otp && acceptedPassenger && (
                 <div>
-                  {/* Passenger on the map marker */}
-                  {rideDetails?.passengers?.[0]?.location?.lat && (
-                    <div className="text-xs text-gray-500 mb-2 text-center">
-                      Passenger location received
+                  {/* Passenger pickup address */}
+                  <div className="bg-white rounded-xl border border-border p-3 mb-3">
+                    <div className="flex items-start gap-2">
+                      <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs text-gray-500">Pickup location</p>
+                        <p className="text-sm font-medium text-text truncate">{rideDetails?.pickup || pickupPos ? 'Passenger location' : ''}</p>
+                      </div>
                     </div>
-                  )}
+                  </div>
 
+                  {/* Passenger info card */}
                   <div className="bg-primary-50 rounded-xl p-4 border border-primary text-center">
                     <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 flex items-center justify-center text-text font-bold text-xl">
                       {acceptedPassenger.name?.[0] || '?'}
@@ -479,29 +547,36 @@ export default function RiderRide() {
                     <p className="text-base font-bold text-text mb-1">{acceptedPassenger.name || 'Student'}</p>
 
                     {/* Distance indicator */}
-                    {rideDetails?.passengers?.[0]?.location?.lat && riderPos && (
+                    {passengerLoc?.lat && riderPos && (
                       <div className="text-sm mb-2">
                         {(() => {
-                          const pl = rideDetails.passengers[0].location;
-                          const dist = calcDistance(riderPos.lat, riderPos.lng, pl.lat, pl.lng);
+                          const dist = calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng);
                           const color = dist <= 10 ? 'text-green-600' : 'text-orange-500';
-                          return <span className={`font-medium ${color}`}>{Math.round(dist)}m away</span>;
+                          return <span className={`font-medium ${color}`}>{Math.round(dist)}m away — {dist <= 10 ? 'arrived!' : 'heading to passenger'}</span>;
                         })()}
                       </div>
                     )}
 
+                    {/* If rider is nearby but not verified yet, show note */}
+                    {passengerLoc?.lat && riderPos && calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng) <= 10 && !isVerified && (
+                      <p className="text-xs text-green-600 mb-2">You've arrived! Ask the passenger for their OTP.</p>
+                    )}
+
                     {/* OTP display */}
-                    {rideDetails?.passengers?.find(p => p.user?._id === acceptedPassenger._id)?.verified ? (
-                      <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                        Verified
+                    {isVerified ? (
+                      <div>
+                        <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium mb-2">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                          Passenger Verified
+                        </div>
+                        <p className="text-sm font-semibold text-green-700 mt-2">Heading to {selectedCollege?.short || 'college'} →</p>
                       </div>
                     ) : (
                       <>
                         <p className="text-xs text-gray-500 mb-3">Ask the passenger for their OTP</p>
                         <button
                           onClick={handleVerifyOtp}
-                          disabled={!rideDetails?.passengers?.[0]?.location?.lat}
+                          disabled={!passengerLoc?.lat}
                           className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Verify OTP
@@ -510,7 +585,7 @@ export default function RiderRide() {
                     )}
 
                     {verifyMsg && (
-                      <p className={`text-sm mt-2 ${verifyMsg.includes('success') ? 'text-green-600' : 'text-red-500'}`}>
+                      <p className={`text-sm mt-2 ${verifyMsg.includes('success') || verifyMsg.includes('Verified') ? 'text-green-600' : 'text-red-500'}`}>
                         {verifyMsg}
                       </p>
                     )}

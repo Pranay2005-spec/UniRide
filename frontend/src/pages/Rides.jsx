@@ -53,7 +53,10 @@ export default function Rides() {
     return null;
   });
   const [showCancel, setShowCancel] = useState(false);
-  const [rideDetails, setRideDetails] = useState(null);
+  const [rideDetails, setRideDetails] = useState(() => {
+    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.rideDetails) return p.rideDetails; } } catch {}
+    return null;
+  });
   const [verified, setVerified] = useState(() => {
     try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.verified) return p.verified; } } catch {}
     return false;
@@ -64,9 +67,9 @@ export default function Rides() {
   // Persist state to sessionStorage
   useEffect(() => {
     if (matchedRide || college) {
-      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup, verified }));
+      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup, verified, rideDetails }));
     }
-  }, [matchedRide, otp, college, pickup, verified]);
+  }, [matchedRide, otp, college, pickup, verified, rideDetails]);
 
   function clearPersistedState() {
     sessionStorage.removeItem('ur_ride');
@@ -135,7 +138,7 @@ export default function Rides() {
     navigate('/app/home');
   }
 
-  // After matching, listen for rider location and share passenger location
+  // After matching, listen for rider location, share passenger location, and listen for verification
   useEffect(() => {
     if (!matchedRide || !connected) return;
 
@@ -143,6 +146,13 @@ export default function Rides() {
 
     const unsubRiderLoc = on('riderLocation', (data) => {
       setRideDetails(prev => prev ? { ...prev, currentLocation: { lat: data.lat, lng: data.lng } } : prev);
+    });
+
+    const unsubVerified = on('passengerVerified', (data) => {
+      if (data.rideId === matchedRide) {
+        setVerified(true);
+        setRideDetails(prev => prev ? { ...prev, verified: true } : prev);
+      }
     });
 
     const sendLoc = () => {
@@ -160,6 +170,7 @@ export default function Rides() {
 
     return () => {
       unsubRiderLoc();
+      unsubVerified();
       clearInterval(locTimer);
     };
   }, [matchedRide, connected]);
@@ -208,23 +219,52 @@ export default function Rides() {
   return (
     <div className="pb-20 relative">
       <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: matchedRide ? '70vh' : '60vh' }}>
-        {matchedRide ? (
-          <>
-            <img src={getTileUrl(mapCenter[0], mapCenter[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-            </div>
-            {driverPos && (
-              <div className="absolute z-10" style={{ left: '50%', top: '50%' }}>
-                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
-                </div>
-                <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+          {matchedRide ? (
+            <>
+              <img src={getTileUrl(mapCenter[0], mapCenter[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
               </div>
-            )}
-            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
-          </>
-        ) : (
+
+              {/* Route: pickup -> college */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
+                <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
+                <path d="M40 340 Q200 280 360 60" stroke="#22C55E" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" transform="translate(0, 4)" />
+                <circle cx="40" cy="340" r="8" fill="#c3f832" stroke="#292928" strokeWidth="2" />
+                <circle cx="360" cy="60" r="8" fill="#22C55E" stroke="#292928" strokeWidth="2" />
+              </svg>
+
+              {/* Driver (rider) live location */}
+              {driverPos && (
+                <div className="absolute z-10" style={{ left: '20%', top: '75%' }}>
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+                  </div>
+                  <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+                </div>
+              )}
+
+              {/* Destination marker */}
+              <div className="absolute z-[6]" style={{ left: '86%', top: '10%' }}>
+                <svg width="32" height="32" viewBox="0 0 200 200" fill="none">
+                  <rect x="25" y="75" width="150" height="105" rx="3" stroke="#22C55E" strokeWidth="3" fill="rgba(34,197,94,0.1)" />
+                  <polygon points="100,15 15,75 185,75" stroke="#22C55E" strokeWidth="3" fill="none" />
+                  <rect x="40" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="65" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="95" y="75" width="10" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="129" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="154" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="88" y="130" width="24" height="50" rx="2" stroke="#22C55E" strokeWidth="1.5" fill="rgba(34,197,94,0.1)" />
+                  <rect x="46" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="69" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="119" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="142" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                </svg>
+              </div>
+
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
+            </>
+          ) : (
           <>
             {pickupPos && (
               <img src={getTileUrl(pickupPos[0], pickupPos[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
@@ -309,10 +349,21 @@ export default function Rides() {
               </div>
               <p className="text-base font-bold text-text">{driver?.name || 'Rider'}</p>
               <p className="text-sm text-green-700 font-medium mt-1">₹30 fare</p>
+
+              {/* Rider distance indicator */}
+              {driverPos && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Rider is on the way
+                </p>
+              )}
+
               {verified ? (
-                <div className="mt-2 inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                  Verified by Rider
+                <div className="mt-2">
+                  <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                    Verified by Rider
+                  </div>
+                  <p className="text-sm font-semibold text-green-700 mt-2">Heading to {college?.short || 'college'} →</p>
                 </div>
               ) : (
                 <>
