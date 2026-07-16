@@ -298,6 +298,13 @@ exports.deactivateRide = async (req, res) => {
     ride.active = false;
     ride.status = 'cancelled';
     await ride.save();
+
+    if (global.io) {
+      global.io.to(`ride:${ride._id}`).emit('rideDeactivated', {
+        rideId: ride._id,
+      });
+    }
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });

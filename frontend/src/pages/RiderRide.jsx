@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
+import { customIcons } from '../lib/customIcons';
 import colleges from '../data/solapurColleges';
 
 const messages = [
@@ -24,6 +26,16 @@ function getTileUrl(lat, lng, zoom = 14) {
 }
 
 const STORAGE_KEY = 'ur_rider_ride';
+
+function FlyToMarker({ position }) {
+  const map = useMap();
+  useEffect(() => {
+    if (position) {
+      map.flyTo(position, 14, { duration: 1 });
+    }
+  }, [position, map]);
+  return null;
+}
 
 export default function RiderRide() {
   const { token, user } = useAuth();
@@ -357,107 +369,124 @@ export default function RiderRide() {
 
       {step !== 'pick' && selectedCollege && (
         <>
-          <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
-            {destPos && (
-              <img src={getTileUrl(destPos[0], destPos[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
-            )}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
+          {otp ? (
+            <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '50vh' }}>
+              <MapContainer center={[riderPos?.lat || destPos[0], riderPos?.lng || destPos[1]]} zoom={14} className="absolute inset-0 w-full h-full z-0" zoomControl={false}>
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                <FlyToMarker position={passengerLoc?.lat ? [passengerLoc.lat, passengerLoc.lng] : (pickupPos ? [pickupPos[0], pickupPos[1]] : null)} />
+                {riderPos && <Marker position={[riderPos.lat, riderPos.lng]} icon={customIcons.riderIcon} />}
+                {passengerLoc?.lat ? (
+                  <Marker position={[passengerLoc.lat, passengerLoc.lng]} icon={customIcons.passengerIcon} />
+                ) : pickupPos ? (
+                  <Marker position={[pickupPos[0], pickupPos[1]]} icon={customIcons.passengerIcon} />
+                ) : null}
+                <Marker position={[selectedCollege.lat, selectedCollege.lng]} icon={customIcons.destinationIcon} />
+              </MapContainer>
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
             </div>
-
-            {/* Route line: pickup -> college */}
-            {destPos && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
-                <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
-                <path d="M40 340 Q200 280 360 60" stroke="#22C55E" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" transform="translate(0, 4)" />
-                <circle cx="40" cy="340" r="8" fill="#c3f832" stroke="#292928" strokeWidth="2" />
-                <circle cx="360" cy="60" r="8" fill="#22C55E" stroke="#292928" strokeWidth="2" />
-                <circle cx="40" cy="340" r="14" fill="none" stroke="#c3f832" strokeWidth="2" opacity="0.5">
-                  <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
-                </circle>
-                <circle cx="360" cy="60" r="14" fill="none" stroke="#22C55E" strokeWidth="2" opacity="0.5">
-                  <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
-                </circle>
-              </svg>
-            )}
-
-            {/* Rider location marker */}
-            {riderPos && (
-              <div className="absolute z-10" style={{
-                left: `${((riderPos.lng - destPos[1]) / 0.02 + 50)}%`,
-                top: `${(50 - (riderPos.lat - destPos[0]) / 0.02)}%`,
-              }}>
-                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
-                </div>
+          ) : (
+            <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
+              {destPos && (
+                <img src={getTileUrl(destPos[0], destPos[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
+              )}
+              <div className="absolute inset-0 opacity-10">
+                <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
               </div>
-            )}
 
-            {/* Passenger pickup marker */}
-            {pickupPos && !passengerLoc?.lat && (
-              <div className="absolute z-10" style={{
-                left: `${((pickupPos[1] - destPos[1]) / 0.02 + 50)}%`,
-                top: `${(50 - (pickupPos[0] - destPos[0]) / 0.02)}%`,
-              }}>
-                <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              {/* Route line: pickup -> college */}
+              {destPos && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
+                  <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
+                  <path d="M40 340 Q200 280 360 60" stroke="#22C55E" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" transform="translate(0, 4)" />
+                  <circle cx="40" cy="340" r="8" fill="#c3f832" stroke="#292928" strokeWidth="2" />
+                  <circle cx="360" cy="60" r="8" fill="#22C55E" stroke="#292928" strokeWidth="2" />
+                  <circle cx="40" cy="340" r="14" fill="none" stroke="#c3f832" strokeWidth="2" opacity="0.5">
+                    <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
+                  </circle>
+                  <circle cx="360" cy="60" r="14" fill="none" stroke="#22C55E" strokeWidth="2" opacity="0.5">
+                    <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
+                  </circle>
+                </svg>
+              )}
+
+              {/* Rider location marker */}
+              {riderPos && (
+                <div className="absolute z-10" style={{
+                  left: `${((riderPos.lng - destPos[1]) / 0.02 + 50)}%`,
+                  top: `${(50 - (riderPos.lat - destPos[0]) / 0.02)}%`,
+                }}>
+                  <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+                  </div>
                 </div>
-                <motion.div className="absolute -bottom-1 -right-1 w-14 h-14 rounded-full bg-orange-400/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
-              </div>
-            )}
+              )}
 
-            {/* Passenger live location marker */}
-            {passengerLoc?.lat && (
-              <div className="absolute z-10" style={{
-                left: `${((passengerLoc.lng - destPos[1]) / 0.02 + 50)}%`,
-                top: `${(50 - (passengerLoc.lat - destPos[0]) / 0.02)}%`,
-              }}>
-                <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+              {/* Passenger pickup marker */}
+              {pickupPos && !passengerLoc?.lat && (
+                <div className="absolute z-10" style={{
+                  left: `${((pickupPos[1] - destPos[1]) / 0.02 + 50)}%`,
+                  top: `${(50 - (pickupPos[0] - destPos[0]) / 0.02)}%`,
+                }}>
+                  <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                  </div>
+                  <motion.div className="absolute -bottom-1 -right-1 w-14 h-14 rounded-full bg-orange-400/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
                 </div>
-                <motion.div className="absolute -bottom-1 -right-1 w-14 h-14 rounded-full bg-orange-400/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
-              </div>
-            )}
+              )}
 
-            {/* Destination marker */}
-            <div className="absolute z-[6]" style={{ left: '86%', top: '10%' }}>
-              <svg width="32" height="32" viewBox="0 0 200 200" fill="none">
-                <rect x="25" y="75" width="150" height="105" rx="3" stroke="#22C55E" strokeWidth="3" fill="rgba(34,197,94,0.1)" />
-                <polygon points="100,15 15,75 185,75" stroke="#22C55E" strokeWidth="3" fill="none" />
-                <rect x="40" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="65" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="95" y="75" width="10" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="129" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="154" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="88" y="130" width="24" height="50" rx="2" stroke="#22C55E" strokeWidth="1.5" fill="rgba(34,197,94,0.1)" />
-                <rect x="46" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="69" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="119" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="142" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-              </svg>
+              {/* Passenger live location marker */}
+              {passengerLoc?.lat && (
+                <div className="absolute z-10" style={{
+                  left: `${((passengerLoc.lng - destPos[1]) / 0.02 + 50)}%`,
+                  top: `${(50 - (passengerLoc.lat - destPos[0]) / 0.02)}%`,
+                }}>
+                  <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
+                  </div>
+                  <motion.div className="absolute -bottom-1 -right-1 w-14 h-14 rounded-full bg-orange-400/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+                </div>
+              )}
+
+              {/* Destination marker */}
+              <div className="absolute z-[6]" style={{ left: '86%', top: '10%' }}>
+                <svg width="32" height="32" viewBox="0 0 200 200" fill="none">
+                  <rect x="25" y="75" width="150" height="105" rx="3" stroke="#22C55E" strokeWidth="3" fill="rgba(34,197,94,0.1)" />
+                  <polygon points="100,15 15,75 185,75" stroke="#22C55E" strokeWidth="3" fill="none" />
+                  <rect x="40" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="65" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="95" y="75" width="10" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="129" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="154" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="88" y="130" width="24" height="50" rx="2" stroke="#22C55E" strokeWidth="1.5" fill="rgba(34,197,94,0.1)" />
+                  <rect x="46" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="69" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="119" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                  <rect x="142" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
+                </svg>
+              </div>
+
+              {/* Animated vehicle moving along route when searching */}
+              {!otp && (
+                <motion.div
+                  className="absolute z-10 pointer-events-none"
+                  style={{ left: '10%', top: '80%' }}
+                  animate={{ left: ['10%', '85%'], top: ['80%', '10%'] }}
+                  transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
+                >
+                  <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+                  </div>
+                  <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
+                </motion.div>
+              )}
+
+              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
             </div>
+          )}
 
-            {/* Animated vehicle moving along route when searching */}
-            {!otp && (
-              <motion.div
-                className="absolute z-10 pointer-events-none"
-                style={{ left: '10%', top: '80%' }}
-                animate={{ left: ['10%', '85%'], top: ['80%', '10%'] }}
-                transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
-              >
-                <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
-                </div>
-                <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
-              </motion.div>
-            )}
-
-            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
-          </div>
-
-          <div className="px-4 -mt-8 relative z-20">
+          <div className="px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh] sm:max-h-none sm:overflow-visible">
             {verifyMsg && !otp && (
               <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 text-center">
                 {verifyMsg}
@@ -577,8 +606,7 @@ export default function RiderRide() {
                         <p className="text-xs text-gray-500 mb-3">Ask the passenger for their OTP</p>
                         <button
                           onClick={handleVerifyOtp}
-                          disabled={!passengerLoc?.lat}
-                          className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
                         >
                           Verify OTP
                         </button>
