@@ -165,22 +165,22 @@ export default function RiderRide() {
   // After accepting, send live location via socket
   useEffect(() => {
     if (!rideId || !otp || !connected) return;
-    const sendLoc = () => {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          setRiderPos({ lat, lng });
-          emit('updateLocation', { rideId, lat, lng });
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000 }
-      );
+    if (!navigator.geolocation) return;
+
+    const onPosition = (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      setRiderPos({ lat, lng });
+      emit('updateLocation', { rideId, lat, lng });
     };
-    sendLoc();
-    const timer = setInterval(sendLoc, 5000);
-    return () => clearInterval(timer);
+
+    const onError = () => {};
+
+    const watcher = navigator.geolocation.watchPosition(onPosition, onError, {
+      enableHighAccuracy: true, timeout: 10000, maximumAge: 3000,
+    });
+
+    return () => navigator.geolocation.clearWatch(watcher);
   }, [rideId, otp, connected]);
 
   async function handleFindRiders() {
@@ -201,6 +201,7 @@ export default function RiderRide() {
       setAcceptedPassenger(passengerData);
       setOtp(data.otp);
       setRideDetails(data.ride);
+      setStep('confirmed');
       const pickup = data.pickup || passengerPickup;
       if (pickup?.position) {
         setPickupPos(pickup.position);
@@ -354,7 +355,7 @@ export default function RiderRide() {
         </div>
       )}
 
-      {(step === 'searching' || otp) && selectedCollege && (
+      {step !== 'pick' && selectedCollege && (
         <>
           <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
             {destPos && (

@@ -33,8 +33,6 @@ export default function Rides() {
   const { emit, on, connected } = useSocket();
   const navState = useLocation().state;
   const navigate = useNavigate();
-  const requestedRef = useRef(false);
-
   const [college, setCollege] = useState(() => {
     try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.college) return p.college; } } catch {}
     return navState?.college;
@@ -63,6 +61,7 @@ export default function Rides() {
   });
   const [redirecting, setRedirecting] = useState(false);
   const [requestError, setRequestError] = useState('');
+  const [retryCount, setRetryCount] = useState(0);
 
   // Persist state to sessionStorage
   useEffect(() => {
@@ -96,11 +95,8 @@ export default function Rides() {
 
   // Create ride request via socket, listen for match
   useEffect(() => {
-    if (!college?.id || !pickup || !connected || matchedRide) return;
-    if (requestedRef.current) return;
-    requestedRef.current = true;
-
-    emit('requestRide', { college, pickup });
+    if (!college?.id || !pickup || !connected) return;
+    if (matchedRide) return;
 
     const unsubError = on('error', (data) => {
       setRequestError(data.message || 'Failed to request ride');
@@ -112,11 +108,13 @@ export default function Rides() {
       setRideDetails(data.ride);
     });
 
+    emit('requestRide', { college, pickup });
+
     return () => {
       unsubError();
       unsubMatched();
     };
-  }, [college?.id, pickup?.address, connected, matchedRide]);
+  }, [college?.id, pickup?.address, connected, matchedRide, retryCount]);
 
   // Cancel pending request on unmount only (if not matched)
   const wasMatched = useRef(false);
@@ -155,23 +153,21 @@ export default function Rides() {
       }
     });
 
-    const sendLoc = () => {
-      if (!navigator.geolocation) return;
-      navigator.geolocation.getCurrentPosition(
+    let locWatcher = null;
+    if (navigator.geolocation) {
+      locWatcher = navigator.geolocation.watchPosition(
         (pos) => {
           emit('updateLocation', { rideId: matchedRide, lat: pos.coords.latitude, lng: pos.coords.longitude });
         },
         () => {},
-        { enableHighAccuracy: true, timeout: 10000 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
       );
-    };
-    sendLoc();
-    const locTimer = setInterval(sendLoc, 5000);
+    }
 
     return () => {
       unsubRiderLoc();
       unsubVerified();
-      clearInterval(locTimer);
+      if (locWatcher != null) navigator.geolocation.clearWatch(locWatcher);
     };
   }, [matchedRide, connected]);
 
@@ -235,8 +231,11 @@ export default function Rides() {
               </svg>
 
               {/* Driver (rider) live location */}
-              {driverPos && (
-                <div className="absolute z-10" style={{ left: '20%', top: '75%' }}>
+              {driverPos && college?.lat && (
+                <div className="absolute z-10" style={{
+                  left: `${((driverPos[1] - college.lng) / 0.02 + 50)}%`,
+                  top: `${(50 - (driverPos[0] - college.lat) / 0.02)}%`,
+                }}>
                   <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
                   </div>
@@ -378,7 +377,7 @@ export default function Rides() {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
               </div>
               <p className="text-sm text-red-500 mb-3">{requestError}</p>
-              <button onClick={() => { setRequestError(''); requestedRef.current = false; }} className="btn-primary !py-2.5 !text-sm">
+              <button onClick={() => { setRequestError(''); setRetryCount(c => c + 1); }} className="btn-primary !py-2.5 !text-sm">
                 Try Again
               </button>
             </div>
