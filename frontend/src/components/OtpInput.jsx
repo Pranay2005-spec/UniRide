@@ -17,8 +17,15 @@ export default function OtpInput({ length = 6, onChange }) {
   }
 
   function handleKeyDown(index, e) {
-    if (e.key === 'Backspace' && !values[index] && index > 0) {
-      refs.current[index - 1]?.focus();
+    if (e.key === 'Backspace') {
+      if (values[index]) {
+        const newValues = [...values];
+        newValues[index] = '';
+        setValues(newValues);
+        onChange(newValues.join(''));
+      } else if (index > 0) {
+        refs.current[index - 1]?.focus();
+      }
     }
   }
 

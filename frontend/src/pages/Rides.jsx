@@ -75,6 +75,8 @@ export default function Rides() {
   const [requestError, setRequestError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
   const [passengerPos, setPassengerPos] = useState(null);
+  const verifiedRef = useRef(verified);
+  verifiedRef.current = verified;
 
   // Persist state to sessionStorage
   useEffect(() => {
@@ -169,11 +171,21 @@ export default function Rides() {
     const unsubDeactivated = on('rideDeactivated', (data) => {
       if (data.rideId === matchedRide) {
         clearPersistedState();
-        setMatchedRide(null);
-        setOtp(null);
-        setRideDetails(null);
-        setVerified(false);
         setPassengerPos(null);
+        if (verifiedRef.current) {
+          // Was connected & verified (ride was active) → show default "no ride" page
+          setMatchedRide(null);
+          setOtp(null);
+          setRideDetails(null);
+          setVerified(false);
+          setCollege(null);
+          setPickup(null);
+        } else {
+          // Not yet verified (rider ended before pickup) → go back to searching
+          setMatchedRide(null);
+          setOtp(null);
+          setRideDetails(null);
+        }
       }
     });
 
@@ -207,6 +219,10 @@ export default function Rides() {
       setRideDetails(null);
       setVerified(false);
       setPassengerPos(null);
+      if (verifiedRef.current) {
+        setCollege(null);
+        setPickup(null);
+      }
     }
   }, [connected]);
 

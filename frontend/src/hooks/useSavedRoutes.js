@@ -1,35 +1,49 @@
 import { useState, useCallback } from 'react';
 
-const STORAGE_KEY = 'uniride_saved_routes';
-
-function load() {
+function load(userId) {
   try {
-    const data = localStorage.getItem(STORAGE_KEY);
+    const key = userId ? `uniride_saved_routes_${userId}` : 'uniride_saved_routes';
+    const data = localStorage.getItem(key);
     return data ? JSON.parse(data) : [];
   } catch {
     return [];
   }
 }
 
-export function useSavedRoutes() {
-  const [routes, setRoutes] = useState(load);
+export function useSavedRoutes(userId) {
+  const [routes, setRoutes] = useState(() => load(userId));
 
   function persist(updated) {
     setRoutes(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    const key = userId ? `uniride_saved_routes_${userId}` : 'uniride_saved_routes';
+    localStorage.setItem(key, JSON.stringify(updated));
   }
 
-  const addRoute = useCallback((pickup, college) => {
-    const exists = routes.some(
-      r => r.college.id === college.id && r.pickup.address === pickup.address
-    );
-    if (exists) return false;
-    const route = {
-      id: Date.now().toString(),
-      pickup: { position: pickup.position, address: pickup.address },
-      college: { id: college.id, name: college.name, short: college.short, lat: college.lat, lng: college.lng },
-    };
-    persist([route, ...routes]);
+  const addRoute = useCallback((pickup, collegeOrDest) => {
+    if (collegeOrDest?.id) {
+      const exists = routes.some(
+        r => r.college?.id === collegeOrDest.id && r.pickup.address === pickup.address
+      );
+      if (exists) return false;
+      const route = {
+        id: Date.now().toString(),
+        pickup: { position: pickup.position, address: pickup.address },
+        college: { id: collegeOrDest.id, name: collegeOrDest.name, short: collegeOrDest.short, lat: collegeOrDest.lat, lng: collegeOrDest.lng },
+      };
+      persist([route, ...routes]);
+    } else {
+      const dest = collegeOrDest || pickup;
+      const exists = routes.some(
+        r => r.destination?.address === dest.address && r.pickup.address === pickup.address
+      );
+      if (exists) return false;
+      const route = {
+        id: Date.now().toString(),
+        pickup: { position: pickup.position, address: pickup.address },
+        destination: { position: dest.position, address: dest.address },
+      };
+      persist([route, ...routes]);
+    }
     return true;
   }, [routes]);
 

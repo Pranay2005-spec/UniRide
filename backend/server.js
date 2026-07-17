@@ -24,6 +24,7 @@ mongoose.connect(process.env.MONGODB_URI)
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/rides', require('./routes/rides'));
+app.use('/api/geo', require('./routes/geo'));
 
 global.io = io;
 require('./socketHandlers')(io);
