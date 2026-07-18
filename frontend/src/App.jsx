@@ -11,6 +11,14 @@ import OfferRide from './pages/OfferRide';
 import RiderDashboard from './pages/RiderDashboard';
 import RiderRide from './pages/RiderRide';
 import ProfilePage from './pages/ProfilePage';
+import MyRides from './pages/MyRides';
+import Payments from './pages/Payments';
+import CollegeVerification from './pages/CollegeVerification';
+import Updates from './pages/Updates';
+import ProfileManagement from './pages/ProfileManagement';
+import CreateRiderAccount from './pages/CreateRiderAccount';
+import LoginRider from './pages/LoginRider';
+
 import LoadingSkeleton from './components/LoadingSkeleton';
 
 function ProtectedRoute({ children }) {
@@ -77,6 +85,28 @@ export default function App() {
             <Route path="/app/profile" element={
               <ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>
             } />
+            <Route path="/app/profile-management" element={
+              <ProtectedRoute><AppLayout><ProfileManagement /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/my-rides" element={
+              <ProtectedRoute><AppLayout><MyRides /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/payments" element={
+              <ProtectedRoute><AppLayout><Payments /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/college-verification" element={
+              <ProtectedRoute><AppLayout><CollegeVerification /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/updates" element={
+              <ProtectedRoute><AppLayout><Updates /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/create-rider-account" element={
+              <ProtectedRoute><AppLayout><CreateRiderAccount /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/login-rider" element={
+              <ProtectedRoute><AppLayout><LoginRider /></AppLayout></ProtectedRoute>
+            } />
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </SocketProvider>

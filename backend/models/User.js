@@ -1,7 +1,9 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  phone: { type: String, required: true, unique: true },
+  phone: { type: String, required: true },
+  password: String,
+  role: { type: String, enum: ['passenger', 'rider'], default: 'passenger' },
   name: String,
   collegeName: String,
   rollNumber: String,
@@ -13,5 +15,7 @@ const userSchema = new mongoose.Schema({
   ridesJoined: { type: Number, default: 0 },
   moneySaved: { type: Number, default: 0 },
 }, { timestamps: true });
+
+userSchema.index({ phone: 1, role: 1 }, { unique: true });
 
 module.exports = mongoose.model('User', userSchema);

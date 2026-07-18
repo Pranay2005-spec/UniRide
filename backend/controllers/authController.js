@@ -1,6 +1,7 @@
 const User = require('../models/User');
 const Otp = require('../models/Otp');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
 
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -39,11 +40,11 @@ exports.verifyOtp = async (req, res) => {
 
     await Otp.deleteOne({ _id: otp._id });
 
-    let user = await User.findOne({ phone });
+    let user = await User.findOne({ phone, role: 'passenger' });
     let isNewUser = false;
 
     if (!user) {
-      user = await User.create({ phone });
+      user = await User.create({ phone, role: 'passenger' });
       isNewUser = true;
     }
 
@@ -115,9 +116,19 @@ exports.updateProfile = async (req, res) => {
     allowed.forEach(field => {
       if (req.body[field]) updates[field] = req.body[field];
     });
+    if (req.files?.profilePicture) updates.profilePicture = req.files.profilePicture[0].path;
 
     const user = await User.findByIdAndUpdate(req.userId, updates, { new: true });
     res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.deleteAccount = async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.userId);
+    res.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -146,6 +157,77 @@ exports.verifyCollege = async (req, res) => {
     const user = await User.findByIdAndUpdate(userId, update, { new: true });
 
     res.json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.setupRiderAccount = async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    if (!phone) return res.status(400).json({ error: 'Phone number required' });
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
+    const existing = await User.findOne({ phone, role: 'rider' });
+    if (existing) {
+      return res.status(400).json({ error: 'Rider account already exists with this phone. Please login.' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const rider = await User.create({
+      phone,
+      password: hashedPassword,
+      role: 'rider',
+    });
+
+    const token = jwt.sign({ userId: rider._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: rider._id,
+        phone: rider.phone,
+        name: rider.name,
+        role: rider.role,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.loginRider = async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+    if (!phone || !password) {
+      return res.status(400).json({ error: 'Phone and password required' });
+    }
+
+    const rider = await User.findOne({ phone, role: 'rider' });
+    if (!rider) {
+      return res.status(400).json({ error: 'No rider account found with this phone. Please set up one first.' });
+    }
+
+    const valid = await bcrypt.compare(password, rider.password);
+    if (!valid) {
+      return res.status(400).json({ error: 'Invalid password' });
+    }
+
+    const token = jwt.sign({ userId: rider._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+    res.json({
+      success: true,
+      token,
+      user: {
+        id: rider._id,
+        phone: rider.phone,
+        name: rider.name,
+        role: rider.role,
+      },
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

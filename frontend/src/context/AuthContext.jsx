@@ -35,6 +35,10 @@ export function AuthProvider({ children }) {
       const data = await res.json();
       if (data.success) {
         setUser(data.user);
+        if (data.user.role) {
+          setRole(data.user.role);
+          sessionStorage.setItem('role', data.user.role);
+        }
       } else {
         logout();
       }
@@ -106,7 +110,7 @@ export function AuthProvider({ children }) {
     <AuthContext.Provider value={{
       user, token, role, loading,
       sendOtp, verifyOtp, completeProfile, updateProfile, logout,
-      setUser, toggleRole, setRole,
+      setUser, setToken, toggleRole, setRole,
     }}>
       {children}
     </AuthContext.Provider>

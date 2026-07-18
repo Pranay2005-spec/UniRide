@@ -20,6 +20,9 @@ router.post('/verify-college', auth, upload.fields([
   { name: 'studentIdCard', maxCount: 1 },
 ]), authController.verifyCollege);
 router.get('/profile', auth, authController.getProfile);
-router.put('/profile', auth, authController.updateProfile);
+router.put('/profile', auth, upload.fields([{ name: 'profilePicture', maxCount: 1 }]), authController.updateProfile);
+router.delete('/profile', auth, authController.deleteAccount);
+router.post('/setup-rider', authController.setupRiderAccount);
+router.post('/login-rider', authController.loginRider);
 
 module.exports = router;
