@@ -20,7 +20,7 @@ export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { routes, addRoute, removeRoute, loading } = useSavedRoutes(user?._id);
+  const { routes, addRoute, removeRoute, loading } = useSavedRoutes(user?.id || user?._id);
 
   const [pickup, setPickup] = useState(null);
   const [showMap, setShowMap] = useState(false);
