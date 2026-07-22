@@ -324,6 +324,10 @@ exports.loginRider = async (req, res) => {
       return res.status(400).json({ error: 'No rider account found with this phone. Please set up one first.' });
     }
 
+    if (rider.verificationStatus !== 'verified') {
+      return res.status(403).json({ error: 'Your rider application is pending admin approval. Please wait for verification.' });
+    }
+
     const valid = await bcrypt.compare(password, rider.password);
     if (!valid) {
       return res.status(400).json({ error: 'Invalid password' });
@@ -359,6 +363,9 @@ exports.verifyRiderOtp = async (req, res) => {
 
     const rider = await Rider.findOne({ phone });
     if (!rider) return res.status(400).json({ error: 'Rider account not found' });
+    if (rider.verificationStatus !== 'verified') {
+      return res.status(403).json({ error: 'Your rider application is pending admin approval. Please wait for verification.' });
+    }
 
     const token = jwt.sign({ userId: rider._id, role: 'rider' }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
