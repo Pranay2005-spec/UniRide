@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Rider = require('../models/Rider');
 const Complaint = require('../models/Complaint');
 const jwt = require('jsonwebtoken');
 
@@ -42,10 +43,9 @@ exports.getPendingStudents = async (req, res) => {
 
 exports.getPendingRiders = async (req, res) => {
   try {
-    const riders = await User.find({
-      role: 'rider',
-      riderVerificationStatus: 'pending',
-    }).select('-password');
+    const riders = await Rider.find({
+      verificationStatus: 'pending',
+    });
     res.json({ success: true, riders });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -79,10 +79,10 @@ exports.verifyRider = async (req, res) => {
       return res.status(400).json({ error: 'userId and action (approved/rejected) required' });
     }
 
-    const rider = await User.findById(userId);
-    if (!rider) return res.status(400).json({ error: 'User not found' });
+    const rider = await Rider.findById(userId);
+    if (!rider) return res.status(400).json({ error: 'Rider not found' });
 
-    rider.riderVerificationStatus = action === 'approved' ? 'verified' : 'rejected';
+    rider.verificationStatus = action === 'approved' ? 'verified' : 'rejected';
     await rider.save();
 
     res.json({ success: true, message: `Rider ${action}` });

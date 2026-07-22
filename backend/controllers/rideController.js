@@ -1,5 +1,6 @@
 const Ride = require('../models/Ride');
 const User = require('../models/User');
+const Rider = require('../models/Rider');
 const RideRequest = require('../models/RideRequest');
 
 exports.createRide = async (req, res) => {
@@ -16,7 +17,11 @@ exports.createRide = async (req, res) => {
       price,
     });
 
-    await User.findByIdAndUpdate(req.userId, { $inc: { ridesOffered: 1 } });
+    if (req.userRole === 'rider') {
+      await Rider.findByIdAndUpdate(req.userId, { $inc: { ridesOffered: 1 } });
+    } else {
+      await User.findByIdAndUpdate(req.userId, { $inc: { ridesOffered: 1 } });
+    }
 
     res.status(201).json({ success: true, ride });
   } catch (error) {

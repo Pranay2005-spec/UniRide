@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 const RideRequest = require('./models/RideRequest');
 const Ride = require('./models/Ride');
 const User = require('./models/User');
+const Rider = require('./models/Rider');
 
 function setupSocketHandlers(io) {
   io.use((socket, next) => {
@@ -125,7 +126,10 @@ function setupSocketHandlers(io) {
         await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: 30 } });
 
         // Fetch driver info for the passenger
-        const driverUser = await User.findById(socket.userId).select('name collegeName profilePicture');
+        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture');
+        if (!driverUser) {
+          driverUser = await Rider.findById(socket.userId).select('name');
+        }
 
         // Notify the passenger they've been matched
         io.to(`user:${request.passenger._id}`).emit('matched', {

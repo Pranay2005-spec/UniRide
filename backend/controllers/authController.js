@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Rider = require('../models/Rider');
 const Otp = require('../models/Otp');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -102,7 +103,12 @@ exports.completeProfile = async (req, res) => {
 
 exports.getProfile = async (req, res) => {
   try {
-    const user = await User.findById(req.userId).select('-__v');
+    let user;
+    if (req.userRole === 'rider') {
+      user = await Rider.findById(req.userId).select('-password -__v');
+    } else {
+      user = await User.findById(req.userId).select('-__v');
+    }
     res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -118,7 +124,12 @@ exports.updateProfile = async (req, res) => {
     });
     if (req.files?.profilePicture) updates.profilePicture = req.files.profilePicture[0].path;
 
-    const user = await User.findByIdAndUpdate(req.userId, updates, { new: true });
+    let user;
+    if (req.userRole === 'rider') {
+      user = await Rider.findByIdAndUpdate(req.userId, updates, { new: true });
+    } else {
+      user = await User.findByIdAndUpdate(req.userId, updates, { new: true });
+    }
     res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -127,7 +138,11 @@ exports.updateProfile = async (req, res) => {
 
 exports.deleteAccount = async (req, res) => {
   try {
-    await User.findByIdAndDelete(req.userId);
+    if (req.userRole === 'rider') {
+      await Rider.findByIdAndDelete(req.userId);
+    } else {
+      await User.findByIdAndDelete(req.userId);
+    }
     res.json({ success: true, message: 'Account deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -192,7 +207,7 @@ exports.setupRiderAccount = async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    const existing = await User.findOne({ phone, role: 'rider' });
+    const existing = await Rider.findOne({ phone });
     if (existing) {
       return res.status(400).json({ error: 'Rider account already exists with this phone. Please login.' });
     }
@@ -203,15 +218,14 @@ exports.setupRiderAccount = async (req, res) => {
     if (req.files?.riderDoc) riderDoc.filePath = req.files.riderDoc[0].path;
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const rider = await User.create({
+    const rider = await Rider.create({
       phone,
       password: hashedPassword,
-      role: 'rider',
       riderDocs: Object.keys(riderDoc).length > 0 ? [riderDoc] : [],
-      riderVerificationStatus: riderDoc.filePath ? 'pending' : 'not_submitted',
+      verificationStatus: riderDoc.filePath ? 'pending' : 'not_submitted',
     });
 
-    const token = jwt.sign({ userId: rider._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: rider._id, role: 'rider' }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       success: true,
@@ -220,8 +234,8 @@ exports.setupRiderAccount = async (req, res) => {
         id: rider._id,
         phone: rider.phone,
         name: rider.name,
-        role: rider.role,
-        riderVerificationStatus: rider.riderVerificationStatus,
+        role: 'rider',
+        riderVerificationStatus: rider.verificationStatus,
       },
     });
   } catch (error) {
@@ -237,13 +251,13 @@ exports.applyRider = async (req, res) => {
     const currentUser = await User.findById(userId);
     if (!currentUser) return res.status(400).json({ error: 'User not found' });
 
-    const existingRider = await User.findOne({ phone: currentUser.phone, role: 'rider' });
+    const existingRider = await Rider.findOne({ phone: currentUser.phone });
     if (existingRider) {
       return res.json({
         success: true,
         alreadyApplied: true,
-        status: existingRider.riderVerificationStatus,
-        message: `Rider application already submitted. Status: ${existingRider.riderVerificationStatus}`,
+        status: existingRider.verificationStatus,
+        message: `Rider application already submitted. Status: ${existingRider.verificationStatus}`,
       });
     }
 
@@ -254,16 +268,15 @@ exports.applyRider = async (req, res) => {
     if (!req.files?.riderDoc) return res.status(400).json({ error: 'Driving license image required' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    const rider = await User.create({
+    const rider = await Rider.create({
       phone: currentUser.phone,
       password: hashedPassword,
-      role: 'rider',
       riderDocs: [{
         docType: docType || 'driving_license',
         docNumber,
         filePath: req.files.riderDoc[0].path,
       }],
-      riderVerificationStatus: 'pending',
+      verificationStatus: 'pending',
     });
 
     res.json({
@@ -282,7 +295,7 @@ exports.getRiderApplicationStatus = async (req, res) => {
     const currentUser = await User.findById(userId);
     if (!currentUser) return res.status(400).json({ error: 'User not found' });
 
-    const rider = await User.findOne({ phone: currentUser.phone, role: 'rider' }).select('riderVerificationStatus riderDocs');
+    const rider = await Rider.findOne({ phone: currentUser.phone }).select('verificationStatus riderDocs');
 
     if (!rider) {
       return res.json({ success: true, applied: false });
@@ -291,7 +304,7 @@ exports.getRiderApplicationStatus = async (req, res) => {
     res.json({
       success: true,
       applied: true,
-      status: rider.riderVerificationStatus,
+      status: rider.verificationStatus,
       docs: rider.riderDocs,
     });
   } catch (error) {
@@ -306,7 +319,7 @@ exports.loginRider = async (req, res) => {
       return res.status(400).json({ error: 'Phone and password required' });
     }
 
-    const rider = await User.findOne({ phone, role: 'rider' });
+    const rider = await Rider.findOne({ phone });
     if (!rider) {
       return res.status(400).json({ error: 'No rider account found with this phone. Please set up one first.' });
     }
@@ -344,10 +357,10 @@ exports.verifyRiderOtp = async (req, res) => {
 
     await Otp.deleteOne({ _id: otp._id });
 
-    const rider = await User.findOne({ phone, role: 'rider' });
+    const rider = await Rider.findOne({ phone });
     if (!rider) return res.status(400).json({ error: 'Rider account not found' });
 
-    const token = jwt.sign({ userId: rider._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ userId: rider._id, role: 'rider' }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
       success: true,
@@ -356,7 +369,7 @@ exports.verifyRiderOtp = async (req, res) => {
         id: rider._id,
         phone: rider.phone,
         name: rider.name,
-        role: rider.role,
+        role: 'rider',
       },
     });
   } catch (error) {
