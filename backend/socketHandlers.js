@@ -100,7 +100,6 @@ function setupSocketHandlers(io) {
         }).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
         socket.emit('waitingPassengers', nearby);
       } catch (err) {
-        console.error('findRiders error:', err);
         socket.emit('findRidersError', { message: err.message });
       }
     });
