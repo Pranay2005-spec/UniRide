@@ -24,6 +24,7 @@ router.put('/profile', auth, upload.fields([{ name: 'profilePicture', maxCount: 
 router.delete('/profile', auth, authController.deleteAccount);
 router.post('/verify-rider-signup-otp', authController.verifyRiderSignupOtp);
 router.post('/setup-rider', upload.fields([{ name: 'riderDoc', maxCount: 1 }]), authController.setupRiderAccount);
+router.post('/create-rider', authController.setupRiderAccount);
 router.post('/apply-rider', auth, upload.fields([{ name: 'riderDoc', maxCount: 1 }]), authController.applyRider);
 router.get('/rider-application-status', auth, authController.getRiderApplicationStatus);
 router.post('/login-rider', authController.loginRider);

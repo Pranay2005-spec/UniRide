@@ -33,7 +33,7 @@ export default function CreateRiderAccount() {
     setError('');
 
     try {
-      const res = await fetch(`${API}/auth/setup-rider`, {
+      const res = await fetch(`${API}/auth/create-rider`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password }),
