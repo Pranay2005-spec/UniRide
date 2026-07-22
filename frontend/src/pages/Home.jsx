@@ -103,9 +103,9 @@ export default function Home() {
     });
   }
 
-  function handleSaveRoute() {
+  async function handleSaveRoute() {
     if (!pickup || !selectedCollege) return;
-    const saved = addRoute(pickup, selectedCollege);
+    const saved = await addRoute(pickup, selectedCollege);
     if (saved) {
       showToastMsg('Route saved!');
     } else {
@@ -375,7 +375,7 @@ export default function Home() {
           <div className="space-y-3">
             {routes.map(route => (
               <motion.div
-                key={route.id}
+                key={route._id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden"
@@ -390,8 +390,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-text">{route.college.short}</p>
-                    <p className="text-xs text-gray-400 truncate mt-0.5">{route.pickup.address}</p>
+                    <p className="font-semibold text-text">{route.college?.short}</p>
+                    <p className="text-xs text-gray-400 truncate mt-0.5">{route.pickup?.address}</p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-semibold text-primary-500">Go</span>
@@ -410,7 +410,7 @@ export default function Home() {
                     Find Rides
                   </button>
                   <button
-                    onClick={(e) => { e.stopPropagation(); removeRoute(route.id); showToastMsg('Route removed'); }}
+                    onClick={async (e) => { e.stopPropagation(); await removeRoute(route._id); showToastMsg('Route removed'); }}
                     className="text-xs text-red-500 font-medium flex items-center gap-1"
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="#EF4444" stroke="#EF4444" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -464,7 +464,7 @@ export default function Home() {
                 ) : (
                   routes.map(route => (
                     <div
-                      key={route.id}
+                      key={route._id}
                       className="flex items-center gap-3 px-4 py-3.5 border-b border-border/30"
                     >
                       <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
@@ -473,11 +473,11 @@ export default function Home() {
                         </svg>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-text text-sm">{route.college.short}</p>
-                        <p className="text-xs text-gray-400 truncate">{route.pickup.address}</p>
+                        <p className="font-medium text-text text-sm">{route.college?.short}</p>
+                        <p className="text-xs text-gray-400 truncate">{route.pickup?.address}</p>
                       </div>
                       <button
-                        onClick={() => { removeRoute(route.id); showToastMsg('Route removed'); }}
+                        onClick={async () => { await removeRoute(route._id); showToastMsg('Route removed'); }}
                         className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-gray-300 hover:text-red-500 transition-colors"
                       >
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
