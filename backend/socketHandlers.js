@@ -4,6 +4,16 @@ const Ride = require('./models/Ride');
 const User = require('./models/User');
 const Rider = require('./models/Rider');
 
+function calcDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const MAX_DISTANCE = 5000;
+
 function setupSocketHandlers(io) {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
@@ -18,7 +28,6 @@ function setupSocketHandlers(io) {
   });
 
   io.on('connection', (socket) => {
-    // Join personal room for direct notifications
     socket.join(`user:${socket.userId}`);
 
     // Passenger requests a ride
@@ -63,28 +72,38 @@ function setupSocketHandlers(io) {
       );
       if (cancelled) {
         io.to(`college:${cancelled.college.id}`).emit('passengerCancelled', {
-          passengerId: socket.userId,
+          requestId: cancelled._id,
         });
       }
     });
 
-    // Rider starts/stops looking for passengers for a college
-    socket.on('findRiders', async (collegeId) => {
-      socket.join(`college:${collegeId}`);
+    // Rider starts looking for passengers
+    socket.on('findRiders', async (data) => {
+      try {
+        const { collegeId, riderLat, riderLng } = data;
+        socket.join(`college:${collegeId}`);
 
-      const cutoff = new Date(Date.now() - 30 * 1000);
-      await RideRequest.updateMany(
-        { 'college.id': Number(collegeId), status: 'pending', createdAt: { $lt: cutoff } },
-        { status: 'cancelled' }
-      );
+        const requests = await RideRequest.find({
+          'college.id': Number(collegeId),
+          status: 'pending',
+        }).populate('passenger', 'name collegeName profilePicture');
 
-      const requests = await RideRequest.find({
-        'college.id': Number(collegeId),
-        status: 'pending',
-        createdAt: { $gte: cutoff },
-      }).populate('passenger', 'name collegeName profilePicture');
+        const nearby = requests.filter(r => {
+          if (!riderLat || !riderLng || !r.pickup?.position) return true;
+          const dist = calcDistance(riderLat, riderLng, r.pickup.position[0], r.pickup.position[1]);
+          return dist <= MAX_DISTANCE;
+        }).map(r => {
+          const plain = r.toObject();
+          if (riderLat && riderLng && r.pickup?.position) {
+            plain.distance = Math.round(calcDistance(riderLat, riderLng, r.pickup.position[0], r.pickup.position[1]));
+          }
+          return plain;
+        }).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
 
-      socket.emit('waitingPassengers', requests);
+        socket.emit('waitingPassengers', nearby);
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
     });
 
     socket.on('stopFindRiders', (collegeId) => {
@@ -125,13 +144,11 @@ function setupSocketHandlers(io) {
 
         await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: 30 } });
 
-        // Fetch driver info for the passenger
         let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture');
         if (!driverUser) {
           driverUser = await Rider.findById(socket.userId).select('name');
         }
 
-        // Notify the passenger they've been matched
         io.to(`user:${request.passenger._id}`).emit('matched', {
           ride: {
             _id: ride._id,
@@ -144,7 +161,6 @@ function setupSocketHandlers(io) {
           otp,
         });
 
-        // Confirm to the rider with pickup location
         socket.emit('requestAccepted', {
           ride: ride.toObject(),
           otp,
@@ -152,7 +168,6 @@ function setupSocketHandlers(io) {
           pickup: request.pickup,
         });
 
-        // Remove from waiting list
         io.to(`college:${request.college.id}`).emit('passengerAccepted', { requestId: request._id });
       } catch (err) {
         socket.emit('error', { message: err.message });
@@ -197,7 +212,7 @@ function setupSocketHandlers(io) {
       } catch {}
     });
 
-    // On disconnect - clean up pending requests
+    // On disconnect
     socket.on('disconnect', async () => {
       try {
         const pending = await RideRequest.findOneAndUpdate(
@@ -207,7 +222,7 @@ function setupSocketHandlers(io) {
         );
         if (pending) {
           io.to(`college:${pending.college.id}`).emit('passengerCancelled', {
-            passengerId: socket.userId,
+            requestId: pending._id,
           });
         }
       } catch {}

@@ -136,7 +136,11 @@ export default function RiderRide() {
   useEffect(() => {
     if (step !== 'searching' || !selectedCollege || !connected) return;
 
-    emit('findRiders', selectedCollege.id);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => emit('findRiders', { collegeId: selectedCollege.id, riderLat: pos.coords.latitude, riderLng: pos.coords.longitude }),
+      () => emit('findRiders', { collegeId: selectedCollege.id }),
+      { enableHighAccuracy: true, timeout: 5000 }
+    );
 
     const unsubWaiting = on('waitingPassengers', (requests) => {
       setWaitingPassengers(requests);
@@ -150,7 +154,7 @@ export default function RiderRide() {
     });
 
     const unsubCancelled = on('passengerCancelled', (data) => {
-      setWaitingPassengers(prev => prev.filter(p => p.passenger?._id !== data.passengerId));
+      setWaitingPassengers(prev => prev.filter(p => p._id !== data.requestId));
     });
 
     const unsubAccepted = on('passengerAccepted', (data) => {
@@ -541,6 +545,9 @@ export default function RiderRide() {
                           <p className="text-base font-semibold text-text">{req.passenger.name || 'Student'}</p>
                           <p className="text-xs text-gray-500">{req.pickup.address}</p>
                           <p className="text-sm text-green-700 font-medium mt-0.5">₹{FARE} fare</p>
+                          {req.distance != null && (
+                            <p className="text-xs text-gray-400 mt-0.5">{req.distance >= 1000 ? (req.distance / 1000).toFixed(1) + ' km' : req.distance + ' m'} away</p>
+                          )}
                         </div>
                       </div>
                       <button
