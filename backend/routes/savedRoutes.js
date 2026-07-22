@@ -17,6 +17,11 @@ router.post('/', auth, async (req, res) => {
     const { pickup, college, destination } = req.body;
     if (!pickup) return res.status(400).json({ error: 'Pickup is required' });
 
+    const count = await SavedRoute.countDocuments({ user: req.userId });
+    if (count >= 5) {
+      return res.status(400).json({ error: 'Maximum 5 saved routes allowed' });
+    }
+
     const existing = await SavedRoute.findOne({
       user: req.userId,
       'pickup.address': pickup.address,

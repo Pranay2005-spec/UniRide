@@ -105,11 +105,15 @@ export default function Home() {
 
   async function handleSaveRoute() {
     if (!pickup || !selectedCollege) return;
+    if (routes.length >= 5) {
+      showToastMsg('Maximum 5 saved routes allowed', 'warning');
+      return;
+    }
     const saved = await addRoute(pickup, selectedCollege);
     if (saved) {
       showToastMsg('Route saved!');
     } else {
-      showToastMsg('Route already saved', 'warning');
+      showToastMsg('Could not save — duplicate or limit reached', 'warning');
     }
   }
 

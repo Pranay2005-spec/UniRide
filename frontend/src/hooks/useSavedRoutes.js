@@ -22,6 +22,8 @@ export function useSavedRoutes(userId) {
   }, [userId]);
 
   const addRoute = useCallback(async (pickup, collegeOrDest) => {
+    if (routes.length >= 5) return false;
+
     const body = { pickup };
     if (collegeOrDest?.id) {
       body.college = { id: collegeOrDest.id, name: collegeOrDest.name, short: collegeOrDest.short, lat: collegeOrDest.lat, lng: collegeOrDest.lng };
@@ -42,7 +44,7 @@ export function useSavedRoutes(userId) {
       }
       return false;
     } catch { return false; }
-  }, []);
+  }, [routes.length]);
 
   const removeRoute = useCallback(async (routeId) => {
     try {
