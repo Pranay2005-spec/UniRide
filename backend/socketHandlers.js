@@ -88,13 +88,9 @@ function setupSocketHandlers(io) {
           status: 'pending',
         }).populate('passenger', 'name collegeName profilePicture');
 
-        console.log(`findRiders: collegeId=${collegeId}, requests=${requests.length}, riderLat=${riderLat}, riderLng=${riderLng}`);
-
         const nearby = requests.filter(r => {
           if (!riderLat || !riderLng || !r.pickup?.position) return true;
-          const dist = calcDistance(riderLat, riderLng, r.pickup.position[0], r.pickup.position[1]);
-          console.log(`  request ${r._id}: pos=${r.pickup.position}, dist=${dist}, include=${dist <= MAX_DISTANCE}`);
-          return dist <= MAX_DISTANCE;
+          return calcDistance(riderLat, riderLng, r.pickup.position[0], r.pickup.position[1]) <= MAX_DISTANCE;
         }).map(r => {
           const plain = r.toObject();
           if (riderLat && riderLng && r.pickup?.position) {
@@ -102,8 +98,6 @@ function setupSocketHandlers(io) {
           }
           return plain;
         }).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-
-        console.log(`findRiders: returning ${nearby.length} passengers`);
         socket.emit('waitingPassengers', nearby);
       } catch (err) {
         console.error('findRiders error:', err);

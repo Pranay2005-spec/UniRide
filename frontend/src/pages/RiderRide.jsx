@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -78,6 +78,7 @@ export default function RiderRide() {
     return null;
   });
   const [verifyMsg, setVerifyMsg] = useState('');
+  const riderPosRef = useRef(null);
 
   // Persist active ride state across page refreshes
   useEffect(() => {
@@ -132,26 +133,36 @@ export default function RiderRide() {
       ).slice(0, 8)
     : [];
 
-  // Listen for waiting passengers via socket — only after rider clicks "Find Riders"
+  // Listen for waiting passengers via socket — show only 1 closest at a time
   useEffect(() => {
     if (step !== 'searching' || !selectedCollege || !connected) return;
 
     emit('findRiders', { collegeId: selectedCollege.id });
     navigator.geolocation.getCurrentPosition(
-      (pos) => emit('findRiders', { collegeId: selectedCollege.id, riderLat: pos.coords.latitude, riderLng: pos.coords.longitude }),
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        riderPosRef.current = { lat, lng };
+        emit('findRiders', { collegeId: selectedCollege.id, riderLat: lat, riderLng: lng });
+      },
       () => {},
       { enableHighAccuracy: true, timeout: 5000 }
     );
 
     const unsubWaiting = on('waitingPassengers', (requests) => {
-      console.log('[RiderRide] waitingPassengers received:', requests?.length, requests);
       setWaitingPassengers(requests);
     });
 
     const unsubNew = on('newPassenger', (request) => {
       setWaitingPassengers(prev => {
         if (prev.some(p => p._id === request._id)) return prev;
-        return [...prev, request];
+        const newReq = { ...request };
+        const pos = riderPosRef.current;
+        if (pos && request.pickup?.position) {
+          newReq.distance = Math.round(calcDistance(pos.lat, pos.lng, request.pickup.position[0], request.pickup.position[1]));
+        }
+        const updated = [...prev, newReq];
+        updated.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
+        return updated;
       });
     });
 
@@ -537,29 +548,27 @@ export default function RiderRide() {
 
               {step === 'searching' && waitingPassengers.length > 0 && !otp && (
                 <div className="space-y-3">
-                  {waitingPassengers.map(req => (
-                    <div key={req._id} className="bg-green-50 rounded-xl p-4 border border-green-200">
-                      <div className="flex items-center gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-text font-bold text-lg">
-                          {req.passenger.name?.[0] || '?'}
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-base font-semibold text-text">{req.passenger.name || 'Student'}</p>
-                          <p className="text-xs text-gray-500">{req.pickup.address}</p>
-                          <p className="text-sm text-green-700 font-medium mt-0.5">₹{FARE} fare</p>
-                          {req.distance != null && (
-                            <p className="text-xs text-gray-400 mt-0.5">{req.distance >= 1000 ? (req.distance / 1000).toFixed(1) + ' km' : req.distance + ' m'} away</p>
-                          )}
-                        </div>
+                  <div className="bg-green-50 rounded-xl p-4 border border-green-200">
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-text font-bold text-lg">
+                        {waitingPassengers[0].passenger.name?.[0] || '?'}
                       </div>
-                      <button
-                        onClick={() => handleConfirmRide(req._id, req.passenger, req.pickup)}
-                        className="w-full py-3 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
-                      >
-                        Confirm Ride
-                      </button>
+                      <div className="flex-1">
+                        <p className="text-base font-semibold text-text">{waitingPassengers[0].passenger.name || 'Student'}</p>
+                        <p className="text-xs text-gray-500">{waitingPassengers[0].pickup.address}</p>
+                        <p className="text-sm text-green-700 font-medium mt-0.5">₹{FARE} fare</p>
+                        {waitingPassengers[0].distance != null && (
+                          <p className="text-xs text-gray-400 mt-0.5">{waitingPassengers[0].distance >= 1000 ? (waitingPassengers[0].distance / 1000).toFixed(1) + ' km' : waitingPassengers[0].distance + ' m'} away</p>
+                        )}
+                      </div>
                     </div>
-                  ))}
+                    <button
+                      onClick={() => handleConfirmRide(waitingPassengers[0]._id, waitingPassengers[0].passenger, waitingPassengers[0].pickup)}
+                      className="w-full py-3 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
+                    >
+                      Confirm Ride
+                    </button>
+                  </div>
                   <button onClick={handleDone} className="w-full py-3 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
                     Cancel
                   </button>
