@@ -39,6 +39,7 @@ app.use('/api/rides', require('./routes/rides'));
 app.use('/api/geo', require('./routes/geo'));
 app.use('/api/admin', require('./routes/admin'));
 app.use('/api/complaints', require('./routes/complaints'));
+app.use('/api/saved-routes', require('./routes/savedRoutes'));
 
 global.io = io;
 require('./socketHandlers')(io);
