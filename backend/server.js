@@ -7,7 +7,14 @@ const path = require('path');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
 
+const fs = require('fs');
+
 dotenv.config();
+
+const uploadDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadDir)) {
+  fs.mkdirSync(uploadDir, { recursive: true });
+}
 
 const app = express();
 const httpServer = createServer(app);

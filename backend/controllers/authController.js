@@ -45,8 +45,13 @@ exports.verifyOtp = async (req, res) => {
     let isNewUser = false;
 
     if (!user) {
-      user = await User.create({ phone, role: 'passenger' });
-      isNewUser = true;
+      const count = await User.countDocuments({ phone, role: 'passenger' });
+      if (count > 0) {
+        user = await User.findOne({ phone, role: 'passenger' });
+      } else {
+        user = await User.create({ phone, role: 'passenger' });
+        isNewUser = true;
+      }
     }
 
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
