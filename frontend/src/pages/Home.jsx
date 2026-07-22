@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import Toast from '../components/Toast';
 import LocationPicker from '../components/LocationPicker';
@@ -19,16 +19,29 @@ function getGreeting() {
 export default function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { routes, addRoute, removeRoute } = useSavedRoutes();
 
   const [pickup, setPickup] = useState(null);
   const [showMap, setShowMap] = useState(false);
   const [showCollegeSearch, setShowCollegeSearch] = useState(false);
   const [query, setQuery] = useState('');
-  const [selectedCollege, setSelectedCollege] = useState(null);
+  const [selectedCollege, setSelectedCollege] = useState(() => {
+    const id = searchParams.get('college');
+    if (id) return allColleges.find(c => c.id === id) || null;
+    return null;
+  });
   const [showManageSaved, setShowManageSaved] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+
+  useEffect(() => {
+    if (selectedCollege) {
+      setSearchParams({ college: selectedCollege.id }, { replace: true });
+    } else {
+      setSearchParams({}, { replace: true });
+    }
+  }, [selectedCollege]);
 
   const isVerified = user?.collegeName && user?.email;
 

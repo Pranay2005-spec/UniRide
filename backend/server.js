@@ -1,6 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const compression = require('compression');
 const dotenv = require('dotenv');
 const path = require('path');
 const { createServer } = require('http');
@@ -14,13 +15,24 @@ const io = new Server(httpServer, {
   cors: { origin: '*', methods: ['GET', 'POST'] },
 });
 
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-mongoose.connect(process.env.MONGODB_URI)
+mongoose.connect(process.env.MONGODB_URI, {
+  maxPoolSize: 10,
+  serverSelectionTimeoutMS: 5000,
+  socketTimeoutMS: 45000,
+})
   .then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB error:', err));
+
+app.get('/api/health', (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const stateMap = { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' };
+  res.json({ status: 'ok', db: stateMap[dbState], timestamp: Date.now() });
+});
 
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/rides', require('./routes/rides'));

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
@@ -41,6 +41,7 @@ export default function RiderRide() {
   const { token, user } = useAuth();
   const { emit, on, connected } = useSocket();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const [step, setStep] = useState(() => {
     try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp) return 'confirmed'; } } catch {}
@@ -48,6 +49,8 @@ export default function RiderRide() {
   });
   const [selectedCollege, setSelectedCollege] = useState(() => {
     try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp && p.selectedCollege) return p.selectedCollege; } } catch {}
+    const id = searchParams.get('college');
+    if (id) return colleges.find(c => c.id === id) || null;
     return null;
   });
   const [showCollegeSearch, setShowCollegeSearch] = useState(false);

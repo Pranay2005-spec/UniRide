@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -9,7 +9,8 @@ function getToken() {
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
-  const [tab, setTab] = useState('students');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'students');
   const [students, setStudents] = useState([]);
   const [riders, setRiders] = useState([]);
   const [complaints, setComplaints] = useState([]);
@@ -20,6 +21,10 @@ export default function AdminDashboard() {
     const token = getToken();
     if (!token) navigate('/admin');
   }, []);
+
+  useEffect(() => {
+    setSearchParams({ tab }, { replace: true });
+  }, [tab]);
 
   useEffect(() => {
     if (tab === 'students') fetchStudents();

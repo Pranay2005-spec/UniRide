@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
@@ -7,6 +7,7 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 export default function Complaints() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
@@ -14,11 +15,15 @@ export default function Complaints() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [myComplaints, setMyComplaints] = useState([]);
-  const [view, setView] = useState('new');
+  const [view, setView] = useState(() => searchParams.get('view') || 'new');
 
   useEffect(() => {
     fetchMyComplaints();
   }, []);
+
+  useEffect(() => {
+    setSearchParams({ view }, { replace: true });
+  }, [view]);
 
   async function fetchMyComplaints() {
     try {

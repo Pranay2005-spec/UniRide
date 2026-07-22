@@ -1,8 +1,10 @@
+const shimmer = `relative overflow-hidden before:absolute before:inset-0 before:-translate-x-full before:animate-[shimmer_1.5s_infinite] before:bg-gradient-to-r before:from-transparent before:via-white/60 before:to-transparent`;
+
 export default function LoadingSkeleton({ count = 3, type = 'ride' }) {
   return (
     <div className="space-y-3">
       {Array.from({ length: count }).map((_, i) => (
-        <div key={i} className="card animate-pulse space-y-3">
+        <div key={i} className={`card ${shimmer} space-y-3`}>
           {type === 'ride' && (
             <>
               <div className="flex items-center gap-3">
