@@ -136,13 +136,15 @@ export default function RiderRide() {
   useEffect(() => {
     if (step !== 'searching' || !selectedCollege || !connected) return;
 
+    emit('findRiders', { collegeId: selectedCollege.id });
     navigator.geolocation.getCurrentPosition(
       (pos) => emit('findRiders', { collegeId: selectedCollege.id, riderLat: pos.coords.latitude, riderLng: pos.coords.longitude }),
-      () => emit('findRiders', { collegeId: selectedCollege.id }),
+      () => {},
       { enableHighAccuracy: true, timeout: 5000 }
     );
 
     const unsubWaiting = on('waitingPassengers', (requests) => {
+      console.log('[RiderRide] waitingPassengers received:', requests?.length, requests);
       setWaitingPassengers(requests);
     });
 
