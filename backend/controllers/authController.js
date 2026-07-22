@@ -134,6 +134,27 @@ exports.deleteAccount = async (req, res) => {
   }
 };
 
+exports.verifyRiderSignupOtp = async (req, res) => {
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: 'Phone and code required' });
+
+    const otp = await Otp.findOne({ phone, code });
+    if (!otp) return res.status(400).json({ error: 'Invalid OTP' });
+
+    if (otp.expiresAt < new Date()) {
+      await Otp.deleteOne({ _id: otp._id });
+      return res.status(400).json({ error: 'OTP expired' });
+    }
+
+    await Otp.deleteOne({ _id: otp._id });
+
+    res.json({ success: true, message: 'Phone verified', phone });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.verifyCollege = async (req, res) => {
   try {
     const userId = req.userId;
@@ -147,7 +168,8 @@ exports.verifyCollege = async (req, res) => {
       collegeName,
       rollNumber,
       email,
-      isVerified: true,
+      isVerified: false,
+      studentVerificationStatus: 'pending',
     };
 
     if (req.files?.studentIdCard) {
@@ -164,7 +186,7 @@ exports.verifyCollege = async (req, res) => {
 
 exports.setupRiderAccount = async (req, res) => {
   try {
-    const { phone, password } = req.body;
+    const { phone, password, docType, docNumber } = req.body;
     if (!phone) return res.status(400).json({ error: 'Phone number required' });
     if (!password || password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -175,11 +197,18 @@ exports.setupRiderAccount = async (req, res) => {
       return res.status(400).json({ error: 'Rider account already exists with this phone. Please login.' });
     }
 
+    const riderDoc = {};
+    if (docType) riderDoc.docType = docType;
+    if (docNumber) riderDoc.docNumber = docNumber;
+    if (req.files?.riderDoc) riderDoc.filePath = req.files.riderDoc[0].path;
+
     const hashedPassword = await bcrypt.hash(password, 10);
     const rider = await User.create({
       phone,
       password: hashedPassword,
       role: 'rider',
+      riderDocs: Object.keys(riderDoc).length > 0 ? [riderDoc] : [],
+      riderVerificationStatus: riderDoc.filePath ? 'pending' : 'not_submitted',
     });
 
     const token = jwt.sign({ userId: rider._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -192,7 +221,78 @@ exports.setupRiderAccount = async (req, res) => {
         phone: rider.phone,
         name: rider.name,
         role: rider.role,
+        riderVerificationStatus: rider.riderVerificationStatus,
       },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.applyRider = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const { password, docType, docNumber } = req.body;
+
+    const currentUser = await User.findById(userId);
+    if (!currentUser) return res.status(400).json({ error: 'User not found' });
+
+    const existingRider = await User.findOne({ phone: currentUser.phone, role: 'rider' });
+    if (existingRider) {
+      return res.json({
+        success: true,
+        alreadyApplied: true,
+        status: existingRider.riderVerificationStatus,
+        message: `Rider application already submitted. Status: ${existingRider.riderVerificationStatus}`,
+      });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+    if (!docNumber) return res.status(400).json({ error: 'Driving license number required' });
+    if (!req.files?.riderDoc) return res.status(400).json({ error: 'Driving license image required' });
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const rider = await User.create({
+      phone: currentUser.phone,
+      password: hashedPassword,
+      role: 'rider',
+      riderDocs: [{
+        docType: docType || 'driving_license',
+        docNumber,
+        filePath: req.files.riderDoc[0].path,
+      }],
+      riderVerificationStatus: 'pending',
+    });
+
+    res.json({
+      success: true,
+      message: 'Rider application submitted for admin approval',
+      status: 'pending',
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getRiderApplicationStatus = async (req, res) => {
+  try {
+    const userId = req.userId;
+    const currentUser = await User.findById(userId);
+    if (!currentUser) return res.status(400).json({ error: 'User not found' });
+
+    const rider = await User.findOne({ phone: currentUser.phone, role: 'rider' }).select('riderVerificationStatus riderDocs');
+
+    if (!rider) {
+      return res.json({ success: true, applied: false });
+    }
+
+    res.json({
+      success: true,
+      applied: true,
+      status: rider.riderVerificationStatus,
+      docs: rider.riderDocs,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -215,6 +315,37 @@ exports.loginRider = async (req, res) => {
     if (!valid) {
       return res.status(400).json({ error: 'Invalid password' });
     }
+
+    await Otp.deleteMany({ phone });
+
+    const code = generateOTP();
+    await Otp.create({ phone, code, expiresAt: new Date(Date.now() + 5 * 60 * 1000) });
+
+    console.log(`Rider OTP for ${phone}: ${code}`);
+
+    res.json({ success: true, needOtp: true, phone });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.verifyRiderOtp = async (req, res) => {
+  try {
+    const { phone, code } = req.body;
+    if (!phone || !code) return res.status(400).json({ error: 'Phone and code required' });
+
+    const otp = await Otp.findOne({ phone, code });
+    if (!otp) return res.status(400).json({ error: 'Invalid OTP' });
+
+    if (otp.expiresAt < new Date()) {
+      await Otp.deleteOne({ _id: otp._id });
+      return res.status(400).json({ error: 'OTP expired' });
+    }
+
+    await Otp.deleteOne({ _id: otp._id });
+
+    const rider = await User.findOne({ phone, role: 'rider' });
+    if (!rider) return res.status(400).json({ error: 'Rider account not found' });
 
     const token = jwt.sign({ userId: rider._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 

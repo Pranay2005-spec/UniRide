@@ -130,6 +130,29 @@ export default function Welcome() {
         <p className="text-xs text-gray-400 text-center mt-6">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
+
+        <div className="mt-6 text-center space-y-2">
+          <div>
+            <span className="text-sm text-gray-400">Are you a rider? </span>
+            <button
+              type="button"
+              onClick={() => navigate('/rider-login')}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              Login here
+            </button>
+          </div>
+          <div>
+            <span className="text-sm text-gray-400">New rider? </span>
+            <button
+              type="button"
+              onClick={() => navigate('/rider-signup')}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              Sign up
+            </button>
+          </div>
+        </div>
       </motion.div>
     </div>
   );

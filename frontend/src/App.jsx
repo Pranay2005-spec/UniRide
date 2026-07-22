@@ -17,7 +17,12 @@ import CollegeVerification from './pages/CollegeVerification';
 import Updates from './pages/Updates';
 import ProfileManagement from './pages/ProfileManagement';
 import CreateRiderAccount from './pages/CreateRiderAccount';
+import SwitchRole from './pages/SwitchRole';
 import LoginRider from './pages/LoginRider';
+import RiderSignup from './pages/RiderSignup';
+import AdminLogin from './pages/AdminLogin';
+import AdminDashboard from './pages/AdminDashboard';
+import Complaints from './pages/Complaints';
 
 import LoadingSkeleton from './components/LoadingSkeleton';
 
@@ -64,6 +69,10 @@ export default function App() {
           <Routes>
             <Route path="/" element={<AuthRedirect />} />
             <Route path="/otp" element={<OtpVerification />} />
+            <Route path="/rider-login" element={<LoginRider />} />
+            <Route path="/rider-signup" element={<RiderSignup />} />
+            <Route path="/admin" element={<AdminLogin />} />
+            <Route path="/admin/dashboard" element={<AdminDashboard />} />
             <Route path="/complete-profile" element={
               <ProtectedRoute><CompleteProfile /></ProtectedRoute>
             } />
@@ -97,8 +106,14 @@ export default function App() {
             <Route path="/app/college-verification" element={
               <ProtectedRoute><AppLayout><CollegeVerification /></AppLayout></ProtectedRoute>
             } />
+            <Route path="/app/complaints" element={
+              <ProtectedRoute><AppLayout><Complaints /></AppLayout></ProtectedRoute>
+            } />
             <Route path="/app/updates" element={
               <ProtectedRoute><AppLayout><Updates /></AppLayout></ProtectedRoute>
+            } />
+            <Route path="/app/switch-role" element={
+              <ProtectedRoute><AppLayout><SwitchRole /></AppLayout></ProtectedRoute>
             } />
             <Route path="/app/create-rider-account" element={
               <ProtectedRoute><AppLayout><CreateRiderAccount /></AppLayout></ProtectedRoute>

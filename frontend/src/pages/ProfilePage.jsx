@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -9,14 +8,22 @@ export default function ProfilePage() {
 
   if (!user) return null;
 
-  const isVerified = !!(user.collegeName && user.email);
+  const verStatus = role === 'rider' ? user.riderVerificationStatus : user.studentVerificationStatus;
+
+  function verBadge() {
+    if (verStatus === 'verified') return { text: 'Verified', color: 'text-success bg-success/10' };
+    if (verStatus === 'pending') return { text: 'Pending', color: 'text-yellow-600 bg-yellow-50' };
+    if (verStatus === 'rejected') return { text: 'Rejected', color: 'text-red-500 bg-red-50' };
+    return null;
+  }
+
   const initials = user.name
     ?.split(' ')
     .map(n => n[0])
     .join('')
     .toUpperCase() || '?';
 
-  const menuItems = [
+  const allMenuItems = [
     {
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -26,6 +33,7 @@ export default function ProfilePage() {
       label: 'Profile Management',
       sub: 'Name, email, phone & account settings',
       route: '/app/profile-management',
+      roles: ['passenger', 'rider'],
     },
     {
       icon: (
@@ -36,6 +44,7 @@ export default function ProfilePage() {
       label: 'My Rides',
       sub: 'View your ride history',
       route: '/app/my-rides',
+      roles: ['passenger', 'rider'],
     },
     {
       icon: (
@@ -47,6 +56,7 @@ export default function ProfilePage() {
       label: 'Payments',
       sub: 'Payment methods & history',
       route: '/app/payments',
+      roles: ['passenger', 'rider'],
     },
     {
       icon: (
@@ -55,9 +65,10 @@ export default function ProfilePage() {
         </svg>
       ),
       label: 'College Verification',
-      sub: isVerified ? 'Verified' : 'Verify your student status',
-      badge: isVerified ? { text: 'Verified', color: 'text-success bg-success/10' } : null,
+      sub: verStatus === 'verified' ? 'Verified' : verStatus === 'pending' ? 'Pending approval' : 'Verify your student status',
+      badge: verStatus === 'verified' ? { text: 'Verified', color: 'text-success bg-success/10' } : verStatus === 'pending' ? { text: 'Pending', color: 'text-yellow-600 bg-yellow-50' } : null,
       route: '/app/college-verification',
+      roles: ['passenger'],
     },
     {
       icon: (
@@ -67,7 +78,8 @@ export default function ProfilePage() {
       ),
       label: role === 'rider' ? 'Switch to Book Rides' : 'Switch to Drive & Earn',
       sub: role === 'rider' ? 'You are currently a Rider' : 'You are currently a Student',
-      route: '/app/create-rider-account',
+      route: '/app/switch-role',
+      roles: ['passenger'],
     },
     {
       icon: (
@@ -78,8 +90,22 @@ export default function ProfilePage() {
       label: 'Updates',
       sub: 'Latest project updates & news',
       route: '/app/updates',
+      roles: ['passenger', 'rider'],
+    },
+    {
+      icon: (
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      ),
+      label: 'Help & Support',
+      sub: 'Complaints & feedback',
+      route: '/app/complaints',
+      roles: ['passenger', 'rider'],
     },
   ];
+
+  const menuItems = allMenuItems.filter(item => item.roles.includes(role));
 
   return (
     <div className="pb-20">
@@ -100,6 +126,11 @@ export default function ProfilePage() {
           <div className="flex-1 min-w-0">
             <h1 className="text-xl font-bold text-text truncate">{user.name || 'Student'}</h1>
             <p className="text-sm text-gray-500 mt-0.5">+91 {user.phone || ''}</p>
+            {verBadge() && (
+              <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${verBadge().color}`}>
+                {role === 'rider' ? 'Rider ' : 'Student '}{verBadge().text}
+              </span>
+            )}
           </div>
         </motion.div>
 
@@ -162,6 +193,7 @@ export default function ProfilePage() {
           ))}
         </motion.div>
       </div>
+
     </div>
   );
 }

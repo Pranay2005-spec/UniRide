@@ -1,17 +1,19 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import Toast from '../components/Toast';
 
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function LoginRider() {
-  const { role, setUser, setToken, setRole } = useAuth();
+  const { setUser, setToken, setRole } = useAuth();
   const navigate = useNavigate();
 
+  const [step, setStep] = useState('login');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
@@ -23,7 +25,7 @@ export default function LoginRider() {
     setTimeout(() => setToast({ visible: false, message: '', type: 'success' }), 3000);
   }
 
-  async function handleSubmit(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     if (phone.length < 10) { setError('Enter a valid 10-digit phone number'); return; }
     if (!password) { setError('Enter your password'); return; }
@@ -39,6 +41,35 @@ export default function LoginRider() {
       });
       const data = await res.json();
 
+      if (data.needOtp) {
+        setStep('otp');
+        setError('');
+        showToastMsg('OTP sent to your phone!');
+      } else {
+        setError(data.error || 'Something went wrong');
+      }
+    } catch {
+      setError('Network error. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleVerifyOtp(e) {
+    e.preventDefault();
+    if (code.length < 6) { setError('Enter a valid 6-digit OTP'); return; }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await fetch(`${API}/auth/verify-rider-otp`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, code }),
+      });
+      const data = await res.json();
+
       if (data.success) {
         setToken(data.token);
         sessionStorage.setItem('token', data.token);
@@ -49,7 +80,7 @@ export default function LoginRider() {
         showToastMsg(`Logged in as ${targetLabel}!`);
         setTimeout(() => navigate('/app/profile'), 1000);
       } else {
-        setError(data.error || 'Something went wrong');
+        setError(data.error || 'Invalid OTP');
       }
     } catch {
       setError('Network error. Please try again.');
@@ -95,72 +126,137 @@ export default function LoginRider() {
           className="bg-white rounded-3xl shadow-xl shadow-black/5 border border-border overflow-hidden"
         >
           <div className="p-6">
-            <div className="text-center mb-6">
-              <div className="w-14 h-14 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                </svg>
-              </div>
-              <h2 className="text-lg font-bold text-text">Welcome back!</h2>
-              <p className="text-xs text-gray-500 mt-1">
-                Login to your rider account to continue
-              </p>
-            </div>
+            <AnimatePresence mode="wait">
+              {step === 'login' ? (
+                <motion.div
+                  key="login"
+                  initial={{ opacity: 0, x: -20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 20 }}
+                >
+                  <div className="text-center mb-6">
+                    <div className="w-14 h-14 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-lg font-bold text-text">Welcome back!</h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Login to your rider account to continue
+                    </p>
+                  </div>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Phone Number</label>
-                <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text font-medium text-sm z-10">+91</span>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    value={phone}
-                    onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="Enter your mobile number"
-                    className="input-field !pl-14 !py-3 !text-sm tracking-wider"
-                    maxLength={10}
-                  />
-                </div>
-              </div>
+                  <form onSubmit={handleLogin} className="space-y-4">
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">Phone Number</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-text font-medium text-sm z-10">+91</span>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          value={phone}
+                          onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                          placeholder="Enter your mobile number"
+                          className="input-field !pl-14 !py-3 !text-sm tracking-wider"
+                          maxLength={10}
+                        />
+                      </div>
+                    </div>
 
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Password</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="input-field !py-3 !text-sm"
-                />
-              </div>
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 mb-1.5 block">Password</label>
+                      <input
+                        type="password"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="input-field !py-3 !text-sm"
+                      />
+                    </div>
 
-              {error && (
-                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-xs text-center">
-                  {error}
-                </motion.p>
+                    {error && (
+                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-xs text-center">
+                        {error}
+                      </motion.p>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={loading || phone.length < 10 || !password}
+                      className="btn-primary !py-3.5 !text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/25"
+                    >
+                      {loading ? (
+                        <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                      ) : `Login as ${targetLabel}`}
+                    </button>
+                  </form>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="otp"
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -20 }}
+                >
+                  <div className="text-center mb-6">
+                    <div className="w-14 h-14 rounded-full bg-success/10 flex items-center justify-center mx-auto mb-3">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      </svg>
+                    </div>
+                    <h2 className="text-lg font-bold text-text">Verify OTP</h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter the 6-digit code sent to +91 {phone}
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleVerifyOtp} className="space-y-4">
+                    <div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={code}
+                        onChange={e => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        placeholder="Enter 6-digit OTP"
+                        className="input-field !py-3 !text-sm text-center tracking-[8px] font-bold"
+                        maxLength={6}
+                      />
+                    </div>
+
+                    {error && (
+                      <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-xs text-center">
+                        {error}
+                      </motion.p>
+                    )}
+
+                    <div className="flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => { setStep('login'); setCode(''); setError(''); }}
+                        className="flex-1 !py-3.5 !text-sm rounded-xl border border-border text-text font-semibold hover:bg-gray-50 transition-colors"
+                      >
+                        Back
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={loading || code.length < 6}
+                        className="flex-1 btn-primary !py-3.5 !text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/25"
+                      >
+                        {loading ? (
+                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : 'Verify'}
+                      </button>
+                    </div>
+                  </form>
+                </motion.div>
               )}
-
-              <button
-                type="submit"
-                disabled={loading || phone.length < 10 || !password}
-                className="btn-primary !py-3.5 !text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/25"
-              >
-                {loading ? (
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                ) : `Login as ${targetLabel}`}
-              </button>
-            </form>
-
-            <div className="mt-5 pt-4 border-t border-border text-center">
-              <p className="text-sm text-gray-500">Don't have a rider account?</p>
-              <Link to="/app/create-rider-account" className="mt-1 inline-block text-sm font-semibold text-primary hover:underline">
-                Create one here
-              </Link>
-            </div>
+            </AnimatePresence>
           </div>
         </motion.div>
       </div>

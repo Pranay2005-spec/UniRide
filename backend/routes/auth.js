@@ -22,7 +22,11 @@ router.post('/verify-college', auth, upload.fields([
 router.get('/profile', auth, authController.getProfile);
 router.put('/profile', auth, upload.fields([{ name: 'profilePicture', maxCount: 1 }]), authController.updateProfile);
 router.delete('/profile', auth, authController.deleteAccount);
-router.post('/setup-rider', authController.setupRiderAccount);
+router.post('/verify-rider-signup-otp', authController.verifyRiderSignupOtp);
+router.post('/setup-rider', upload.fields([{ name: 'riderDoc', maxCount: 1 }]), authController.setupRiderAccount);
+router.post('/apply-rider', auth, upload.fields([{ name: 'riderDoc', maxCount: 1 }]), authController.applyRider);
+router.get('/rider-application-status', auth, authController.getRiderApplicationStatus);
 router.post('/login-rider', authController.loginRider);
+router.post('/verify-rider-otp', authController.verifyRiderOtp);
 
 module.exports = router;

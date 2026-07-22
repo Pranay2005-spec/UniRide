@@ -21,7 +21,7 @@ export default function CollegeVerification() {
 
   if (!user) return null;
 
-  const isVerified = !!(user.collegeName && user.email);
+  const verStatus = user.studentVerificationStatus || 'not_submitted';
   const initials = user.name
     ?.split(' ')
     .map(n => n[0])
@@ -57,7 +57,7 @@ export default function CollegeVerification() {
       const data = await res.json();
       if (data.success) {
         setUser(data.user);
-        showToastMsg('College verified! You now get student pricing.');
+        showToastMsg('Submitted for verification! Our team will review it shortly.');
       } else {
         showToastMsg(data.error || 'Verification failed', 'error');
       }
@@ -68,7 +68,7 @@ export default function CollegeVerification() {
     }
   }
 
-  if (isVerified) {
+  if (verStatus === 'verified') {
     return (
       <div className="pb-20">
         <div className="px-4 pt-4 pb-2 flex items-center gap-3">
@@ -98,6 +98,34 @@ export default function CollegeVerification() {
           </div>
         </div>
 
+        <Toast {...toast} />
+      </div>
+    );
+  }
+
+  if (verStatus === 'pending') {
+    return (
+      <div className="pb-20">
+        <div className="px-4 pt-4 pb-2 flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="15 18 9 12 15 6" />
+            </svg>
+          </button>
+          <h1 className="text-xl font-bold text-text">College Verification</h1>
+        </div>
+        <div className="px-4 mt-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-6 text-center">
+            <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="#CA8A04">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+              </svg>
+            </div>
+            <h2 className="text-lg font-bold text-text mb-1">Pending Approval</h2>
+            <p className="text-sm text-gray-500">Your college details have been submitted and are being reviewed by our team. You'll be notified once verified.</p>
+            <button onClick={() => navigate(-1)} className="mt-6 btn-primary !w-auto px-8 !py-3 !text-sm mx-auto">Go Back</button>
+          </div>
+        </div>
         <Toast {...toast} />
       </div>
     );
