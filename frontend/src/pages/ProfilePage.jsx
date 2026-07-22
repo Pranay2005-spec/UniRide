@@ -73,17 +73,6 @@ export default function ProfilePage() {
     {
       icon: (
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-        </svg>
-      ),
-      label: role === 'rider' ? 'Switch to Book Rides' : 'Switch to Drive & Earn',
-      sub: role === 'rider' ? 'You are currently a Rider' : 'You are currently a Student',
-      route: '/app/switch-role',
-      roles: ['passenger'],
-    },
-    {
-      icon: (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M18 20V10M12 20V4M6 20v-6" />
         </svg>
       ),
