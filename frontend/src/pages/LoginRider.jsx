@@ -193,6 +193,17 @@ export default function LoginRider() {
                       ) : `Login as ${targetLabel}`}
                     </button>
                   </form>
+
+                  <div className="mt-5 pt-4 border-t border-border text-center">
+                    <p className="text-sm text-gray-500">Don't have a rider account?</p>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/rider-signup')}
+                      className="mt-1 text-sm font-semibold text-primary hover:underline"
+                    >
+                      Create one here
+                    </button>
+                  </div>
                 </motion.div>
               ) : (
                 <motion.div
