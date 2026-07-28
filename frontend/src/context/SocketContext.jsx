@@ -60,12 +60,13 @@ export function SocketProvider({ children }) {
   };
 
   const on = (event, handler) => {
-    const socket = socketRef.current;
-    if (socket) {
-      socket.on(event, handler);
+    if (socketRef.current) {
+      socketRef.current.on(event, handler);
     }
     return () => {
-      socket?.off(event, handler);
+      if (socketRef.current) {
+        socketRef.current.off(event, handler);
+      }
     };
   };
 

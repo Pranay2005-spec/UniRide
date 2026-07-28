@@ -114,9 +114,9 @@ UniRide/
 
 ## Planned / Discussed
 - **Payment methods:** Cash (keep as-is) + Razorpay (online). Passenger selects at request time. Backend creates Razorpay order on ride acceptance, passenger pays after OTP verification. Webhook to confirm. Models need new fields (see above).
-- **Rider signup simplify:** Remove `docType` dropdown from RiderSignup.jsx. Only ask for driving license (file upload + license number). Update `riderDocs` array in Rider model to be just `drivingLicense` fields.
+- **Rider signup simplify:** Remove `docType` dropdown from RiderSignup.jsx. Only ask for driving license (file upload + license number). Update `riderDocs` array in Rider model to be just `drivingLicense` fields.`
 - **Chat between rider & passenger:** Lightweight approach — use existing `ride:${rideId}` socket room. Add `sendMessage` event, no persistence. Inbox icon on Rides.jsx & RiderRide.jsx to open chat bubble overlay. No history needed since rides are short.
 - **Rating & reviews:** 1–5 star rating after each ride. Backend model + endpoint. Prompts both rider and passenger after ride completion.
-- **Emergency SOS:** Share ride details (driver name, vehicle number, live location) with emergency contact via SMS. Adds trust for students/parents.
+- **Emergency SOS:** Share ride details (driver name, vehicle number, live location) with emergency contact via SMS. Adds trust `for students/parents.
 - **Separate rider profile page:** Different from passenger profile. Shows earnings, ride history, vehicle details, ratings. Passenger profile keeps it simple (rides joined, money saved).
 - No OOP refactor planned — current functional style is fine for project size.

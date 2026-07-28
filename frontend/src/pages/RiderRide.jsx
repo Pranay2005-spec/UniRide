@@ -595,7 +595,7 @@ export default function RiderRide() {
                       <div className="flex-1">
                         <p className="text-base font-semibold text-text">{waitingPassengers[0].passenger.name || 'Student'}</p>
                         <p className="text-xs text-gray-500">{waitingPassengers[0].pickup.address}</p>
-                        <p className="text-sm text-green-700 font-medium mt-0.5">₹{FARE} fare</p>
+                        <p className="text-sm text-green-700 font-medium mt-0.5">₹{waitingPassengers[0].price ?? rideDetails?.price ?? FARE} fare</p>
                         {waitingPassengers[0].distance != null && (
                           <p className="text-xs text-gray-400 mt-0.5">{waitingPassengers[0].distance >= 1000 ? (waitingPassengers[0].distance / 1000).toFixed(1) + ' km' : waitingPassengers[0].distance + ' m'} away</p>
                         )}
@@ -635,6 +635,7 @@ export default function RiderRide() {
                       {acceptedPassenger.name?.[0] || '?'}
                     </div>
                     <p className="text-base font-bold text-text mb-1">{acceptedPassenger.name || 'Student'}</p>
+                    <p className="text-sm text-green-700 font-medium mb-2">₹{rideDetails?.price || 30} fare</p>
 
                     {/* Distance indicator */}
                     {passengerLoc?.lat && riderPos && (

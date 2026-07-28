@@ -19,6 +19,7 @@ const rideRequestSchema = new mongoose.Schema({
     default: 'pending',
   },
   matchedRide: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
+  price: { type: Number, default: 30 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('RideRequest', rideRequestSchema);

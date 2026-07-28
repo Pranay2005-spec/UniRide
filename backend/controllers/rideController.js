@@ -265,22 +265,6 @@ exports.verifyPassengerOtp = async (req, res) => {
 
     if (passenger.otp !== otp) return res.status(400).json({ error: 'Incorrect OTP' });
 
-    // Check proximity (10 meters)
-    if (ride.currentLocation && passenger.location) {
-      const R = 6371000;
-      const dLat = (passenger.location.lat - ride.currentLocation.lat) * Math.PI / 180;
-      const dLng = (passenger.location.lng - ride.currentLocation.lng) * Math.PI / 180;
-      const a = Math.sin(dLat/2)**2 +
-                Math.cos(ride.currentLocation.lat * Math.PI / 180) *
-                Math.cos(passenger.location.lat * Math.PI / 180) *
-                Math.sin(dLng/2)**2;
-      const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-      if (dist > 10) {
-        return res.status(400).json({ error: `Too far (${Math.round(dist)}m). Must be within 10m.` });
-      }
-    }
-
     passenger.verified = true;
     await ride.save();
 
@@ -323,11 +307,12 @@ exports.completeRide = async (req, res) => {
     ride.active = false;
     await ride.save();
 
-    if (global.io && wasVerified) {
+    if (global.io) {
       global.io.to(`ride:${ride._id}`).emit('rideCompleted', {
         rideId: ride._id,
         driver: { _id: ride.driver._id, name: ride.driver.name },
         passengers: ride.passengers.map(p => ({ _id: p.user._id, name: p.user.name })),
+        showReview: wasVerified,
       });
     }
 
@@ -492,7 +477,7 @@ exports.acceptRequest = async (req, res) => {
       date: now,
       time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
       seats: 3,
-      price: 30,
+      price: request.price || 30,
       active: true,
       currentStop: 0,
       passengers: [{ user: request.passenger._id, otp }],

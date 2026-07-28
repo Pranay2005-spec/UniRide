@@ -33,7 +33,7 @@ function setupSocketHandlers(io) {
     // Passenger requests a ride
     socket.on('requestRide', async (data) => {
       try {
-        const { college, pickup } = data;
+        const { college, pickup, fare } = data;
 
         if (!college || !college.id) {
           return socket.emit('error', { message: 'College information is required' });
@@ -51,6 +51,7 @@ function setupSocketHandlers(io) {
           passenger: socket.userId,
           college,
           pickup,
+          price: fare || 30,
         });
 
         const populated = await RideRequest.findById(request._id)
@@ -131,7 +132,7 @@ function setupSocketHandlers(io) {
           date: now,
           time: now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
           seats: 3,
-          price: 30,
+          price: request.price || 30,
           active: true,
           currentStop: 0,
           passengers: [{ user: request.passenger._id, otp }],
@@ -156,6 +157,7 @@ function setupSocketHandlers(io) {
             price: ride.price,
             pickup: ride.pickup,
             route: ride.route,
+            otp,
           },
           otp,
         });
@@ -229,6 +231,20 @@ function setupSocketHandlers(io) {
         if (pending) {
           io.to(`college:${pending.college.id}`).emit('passengerCancelled', {
             requestId: pending._id,
+          });
+        }
+
+        const activeRide = await Ride.findOne({
+          driver: socket.userId,
+          active: true,
+          status: 'active',
+        });
+        if (activeRide) {
+          activeRide.active = false;
+          activeRide.status = 'cancelled';
+          await activeRide.save();
+          io.to(`ride:${activeRide._id}`).emit('rideDeactivated', {
+            rideId: activeRide._id,
           });
         }
       } catch {}

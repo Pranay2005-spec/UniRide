@@ -98,8 +98,9 @@ export default function Home() {
 
   function handleConfirmRide() {
     setShowConfirm(false);
+    sessionStorage.removeItem('ur_ride');
     navigate('/app/rides', {
-      state: { college: selectedCollege, pickup }
+      state: { college: selectedCollege, pickup, fare: bikePrice }
     });
   }
 
@@ -406,9 +407,9 @@ export default function Home() {
                 </button>
                 <div className="border-t border-border/50 px-4 py-2 flex items-center justify-between bg-gray-50/50">
                   <button
-                    onClick={() => navigate('/app/rides', {
-                      state: { college: route.college, pickup: route.pickup }
-                    })}
+                    onClick={() => { sessionStorage.removeItem('ur_ride'); navigate('/app/rides', {
+                      state: { college: route.college, pickup: route.pickup, fare: route.pickup?.position && route.college?.lat && route.college?.lng ? Math.round((() => { const [lat1, lon1] = route.pickup.position; const R = 6371; const dLat = (route.college.lat - lat1) * Math.PI / 180; const dLon = (route.college.lng - lon1) * Math.PI / 180; return R * 2 * Math.atan2(Math.sqrt(Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(route.college.lat * Math.PI / 180) * Math.sin(dLon/2)**2), Math.sqrt(1 - (Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(route.college.lat * Math.PI / 180) * Math.sin(dLon/2)**2))); })() * 4 + 10) : null }
+                    }); }}
                     className="text-xs font-medium text-primary-600"
                   >
                     Find Rides

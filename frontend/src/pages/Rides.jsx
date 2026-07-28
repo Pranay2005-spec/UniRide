@@ -54,6 +54,10 @@ export default function Rides() {
     try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.pickup) return p.pickup; } } catch {}
     return navState?.pickup;
   });
+  const [fare, setFare] = useState(() => {
+    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.fare) return p.fare; } } catch {}
+    return navState?.fare;
+  });
   const [msgIndex, setMsgIndex] = useState(0);
   const [matchedRide, setMatchedRide] = useState(() => {
     try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.matchedRide) return p.matchedRide; } } catch {}
@@ -85,9 +89,9 @@ export default function Rides() {
   // Persist state to sessionStorage
   useEffect(() => {
     if (matchedRide || college) {
-      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup, verified, rideDetails }));
+      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup, fare, verified, rideDetails }));
     }
-  }, [matchedRide, otp, college, pickup, verified, rideDetails]);
+  }, [matchedRide, otp, college, pickup, fare, verified, rideDetails]);
 
   function clearPersistedState() {
     sessionStorage.removeItem('ur_ride');
@@ -112,9 +116,53 @@ export default function Rides() {
     return () => clearInterval(interval);
   }, [college, pickup]);
 
+  // On mount, verify persisted match is still valid
+  useEffect(() => {
+    (async () => {
+      const s = sessionStorage.getItem('ur_ride');
+      if (!s || !connected) return;
+      let parsed;
+      try { parsed = JSON.parse(s); } catch { return; }
+      if (!parsed.matchedRide) return;
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/my-match`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!data.matched) {
+          clearPersistedState();
+          setMatchedRide(null);
+          setOtp(null);
+          setRideDetails(null);
+          setVerified(false);
+        } else if (data.otp) {
+          setOtp(data.otp);
+          setVerified(data.verified);
+          sessionStorage.setItem('ur_ride', JSON.stringify({
+            ...JSON.parse(s),
+            otp: data.otp,
+            verified: data.verified,
+          }));
+        }
+      } catch {}
+    })();
+  }, [connected]);
+
   // Create ride request via socket, listen for match
   useEffect(() => {
     if (!college?.id || !pickup || !connected) return;
+    if (matchedRide && !navState?.college) return;
+
+    // Clear any stale state when starting fresh from nav
+    if (navState?.college && !matchedRide) {
+      clearPersistedState();
+      setOtp(null);
+      setRideDetails(null);
+      setVerified(false);
+      setFare(navState?.fare);
+    }
+
+    // Already matched — don't re-emit or clear
     if (matchedRide) return;
 
     const unsubError = on('error', (data) => {
@@ -122,18 +170,29 @@ export default function Rides() {
     });
 
     const unsubMatched = on('matched', (data) => {
+      const otpVal = data?.otp || data?.ride?.otp;
+      if (!data?.ride?._id || !otpVal) return;
       setMatchedRide(data.ride._id);
-      setOtp(data.otp);
+      setOtp(otpVal);
       setRideDetails(data.ride);
+      sessionStorage.setItem('ur_ride', JSON.stringify({
+        matchedRide: data.ride._id,
+        otp: otpVal,
+        college,
+        pickup,
+        fare,
+        verified: false,
+        rideDetails: data.ride,
+      }));
     });
 
-    emit('requestRide', { college, pickup });
+    emit('requestRide', { college, pickup, fare });
 
     return () => {
       unsubError();
       unsubMatched();
     };
-  }, [college?.id, pickup?.address, connected, matchedRide, retryCount]);
+  }, [college?.id, pickup?.address, connected, retryCount]);
 
   // Cancel pending request on unmount only (if not matched)
   const wasMatched = useRef(false);
@@ -176,23 +235,15 @@ export default function Rides() {
       if (data.rideId === matchedRide) {
         clearPersistedState();
         setPassengerPos(null);
-        if (verifiedRef.current) {
-          setMatchedRide(null);
-          setOtp(null);
-          setRideDetails(null);
-          setVerified(false);
-          setCollege(null);
-          setPickup(null);
-        } else {
-          setMatchedRide(null);
-          setOtp(null);
-          setRideDetails(null);
-        }
+        setMatchedRide(null);
+        setOtp(null);
+        setRideDetails(null);
+        setVerified(false);
       }
     });
 
     const unsubCompleted = on('rideCompleted', (data) => {
-      if (data.rideId === matchedRide && data.driver) {
+      if (data.rideId === matchedRide) {
         rideIdForReview.current = data.rideId;
         clearPersistedState();
         setPassengerPos(null);
@@ -202,8 +253,10 @@ export default function Rides() {
         setVerified(false);
         setCollege(null);
         setPickup(null);
-        setReviewTarget({ _id: data.driver._id, name: data.driver.name });
-        setShowReview(true);
+        if (data.showReview && data.driver) {
+          setReviewTarget({ _id: data.driver._id, name: data.driver.name });
+          setShowReview(true);
+        }
       }
     });
 
@@ -397,7 +450,7 @@ export default function Rides() {
                 )}
               </div>
               <p className="text-base font-bold text-text">{driver?.name || 'Rider'}</p>
-              <p className="text-sm text-green-700 font-medium mt-1">₹30 fare</p>
+              <p className="text-sm text-green-700 font-medium mt-1">₹{rideDetails?.price || 30} fare</p>
 
               {/* Rider distance indicator */}
               {driverPos && (
@@ -416,7 +469,7 @@ export default function Rides() {
                 </div>
               ) : (
                 <>
-                  <p className="text-3xl font-bold text-primary mt-3 tracking-widest">{otp || '----'}</p>
+                  <p className="text-3xl font-bold text-primary mt-3 tracking-widest">{otp || rideDetails?.otp || '----'}</p>
                   <p className="text-xs text-gray-500 mt-1">Show this OTP to the rider when they arrive</p>
                 </>
               )}
