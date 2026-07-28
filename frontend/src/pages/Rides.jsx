@@ -82,6 +82,7 @@ export default function Rides() {
   const [passengerPos, setPassengerPos] = useState(null);
   const [showReview, setShowReview] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const verifiedRef = useRef(verified);
   verifiedRef.current = verified;
   const rideIdForReview = useRef(null);
@@ -352,22 +353,83 @@ export default function Rides() {
     );
   }
 
-  return (
+return (
     <div className="pb-20 relative">
-      <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: matchedRide ? '55vh' : '60vh' }}>
-          {matchedRide ? (
-            <>
-              <MapContainer key={driverPos ? driverPos.join(',') : 'center'} center={mapCenter} zoom={14} className="absolute inset-0 w-full h-full z-0" zoomControl={false}>
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <FlyToMarker position={driverPos} />
-                {driverPos && <Marker position={driverPos} icon={customIcons.riderIcon} />}
-                {passengerPos && <Marker position={[passengerPos.lat, passengerPos.lng]} icon={customIcons.passengerIcon} />}
-                {college?.lat != null && college?.lng != null && <Marker position={[college.lat, college.lng]} icon={customIcons.destinationIcon} />}
-              </MapContainer>
-              <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
-            </>
-          ) : (
-          <>
+      {matchedRide ? (
+        <div className="flex flex-col h-[calc(100vh-5rem)]">
+          <div className="flex-1 min-h-0 relative overflow-hidden bg-gray-100">
+            <MapContainer key={driverPos ? driverPos.join(',') : 'center'} center={mapCenter} zoom={14} className="absolute inset-0 w-full h-full z-0" zoomControl={false}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              <FlyToMarker position={driverPos} />
+              {driverPos && <Marker position={driverPos} icon={customIcons.riderIcon} />}
+              {passengerPos && <Marker position={[passengerPos.lat, passengerPos.lng]} icon={customIcons.passengerIcon} />}
+              {college?.lat != null && college?.lng != null && <Marker position={[college.lat, college.lng]} icon={customIcons.destinationIcon} />}
+            </MapContainer>
+            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
+          </div>
+          <div className="shrink-0 mx-4 -mt-8 relative z-20">
+            <div className="bg-white rounded-2xl border border-border shadow-sm">
+              <button
+                onClick={() => setSheetExpanded(prev => !prev)}
+                className="w-full text-left px-4 py-3 flex items-center gap-3"
+              >
+                <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-text font-bold text-sm shrink-0 overflow-hidden">
+                  {driver?.profilePicture ? (
+                    <img src={driver.profilePicture} alt={driver.name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{driver?.name?.[0] || '?'}</span>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-text">{driver?.name || 'Rider'}</p>
+                  <p className="text-xs text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
+                </div>
+                {!verified ? (
+                  <div className="px-4 py-2 rounded-xl bg-yellow-100 text-yellow-700 text-xs font-medium shrink-0">
+                    Show OTP
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shrink-0">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                    Verified
+                  </div>
+                )}
+                <motion.svg
+                  animate={{ rotate: sheetExpanded ? 180 : 0 }}
+                  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                  className="text-gray-400 shrink-0"
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </motion.svg>
+              </button>
+              <motion.div
+                animate={{ height: sheetExpanded ? 'auto' : 0, opacity: sheetExpanded ? 1 : 0 }}
+                transition={{ duration: 0.2, ease: 'easeInOut' }}
+                className="overflow-hidden"
+              >
+                <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                  {driverPos && (
+                    <p className="text-sm text-gray-500">Rider is on the way</p>
+                  )}
+                  {!verified ? (
+                    <>
+                      <p className="text-3xl font-bold text-primary text-center tracking-widest">{otp || rideDetails?.otp || '----'}</p>
+                      <p className="text-xs text-gray-500 text-center">Show this OTP to the rider when they arrive</p>
+                      <button onClick={() => setShowCancel(true)} className="w-full py-2.5 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                        Cancel Ride
+                      </button>
+                    </>
+                  ) : (
+                    <p className="text-sm font-semibold text-green-700">Heading to {college?.short || 'college'} →</p>
+                  )}
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
             {pickupPos && (
               <img src={getTileUrl(pickupPos[0], pickupPos[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
             )}
@@ -430,93 +492,59 @@ export default function Rides() {
             </motion.div>
 
             <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
-          </>
-        )}
-      </div>
+          </div>
 
-      <div className="px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh] sm:max-h-none sm:overflow-visible">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-white rounded-2xl border border-border shadow-sm p-4"
-        >
-          {matchedRide ? (
-            <div className="text-center py-2">
-              <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 overflow-hidden flex items-center justify-center">
-                {driver?.profilePicture ? (
-                  <img src={driver.profilePicture} alt={driver.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-text font-bold text-xl">{driver?.name?.[0] || '?'}</span>
-                )}
-              </div>
-              <p className="text-base font-bold text-text">{driver?.name || 'Rider'}</p>
-              <p className="text-sm text-green-700 font-medium mt-1">₹{rideDetails?.price || 30} fare</p>
-
-              {/* Rider distance indicator */}
-              {driverPos && (
-                <p className="text-xs text-gray-500 mt-1">
-                  Rider is on the way
-                </p>
-              )}
-
-              {verified ? (
-                <div className="mt-2">
-                  <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                    Verified by Rider
+          <div className="px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh] sm:max-h-none sm:overflow-visible">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-2xl border border-border shadow-sm p-4"
+            >
+              {requestError ? (
+                <div className="text-center py-4">
+                  <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
                   </div>
-                  <p className="text-sm font-semibold text-green-700 mt-2">Heading to {college?.short || 'college'} →</p>
+                  <p className="text-sm text-red-500 mb-3">{requestError}</p>
+                  <button onClick={() => { setRequestError(''); setRetryCount(c => c + 1); }} className="btn-primary !py-2.5 !text-sm">
+                    Try Again
+                  </button>
                 </div>
               ) : (
                 <>
-                  <p className="text-3xl font-bold text-primary mt-3 tracking-widest">{otp || rideDetails?.otp || '----'}</p>
-                  <p className="text-xs text-gray-500 mt-1">Show this OTP to the rider when they arrive</p>
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="flex flex-col items-center gap-0.5">
+                      <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                      <div className="w-0.5 h-6 bg-gray-300" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-text truncate">{pickup.address}</p>
+                      <p className="text-sm text-gray-500 truncate">{college.short}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-center gap-2 mb-3">
+                    <motion.span key={msgIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="text-sm text-gray-500">{messages[msgIndex]}</motion.span>
+                    <span className="flex gap-0.5">
+                      {[0, 1, 2].map(i => (
+                        <motion.span key={i} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      ))}
+                    </span>
+                  </div>
+                  <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }} className="w-1/2 h-full rounded-full bg-primary" />
+                  </div>
+
+                  <button onClick={() => setShowCancel(true)} className="w-full mt-4 py-3 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                    Cancel Ride
+                  </button>
                 </>
               )}
-            </div>
-          ) : requestError ? (
-            <div className="text-center py-4">
-              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
-              </div>
-              <p className="text-sm text-red-500 mb-3">{requestError}</p>
-              <button onClick={() => { setRequestError(''); setRetryCount(c => c + 1); }} className="btn-primary !py-2.5 !text-sm">
-                Try Again
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex flex-col items-center gap-0.5">
-                  <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-                  <div className="w-0.5 h-6 bg-gray-300" />
-                  <div className="w-2.5 h-2.5 rounded-full bg-green-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-text truncate">{pickup.address}</p>
-                  <p className="text-sm text-gray-500 truncate">{college.short}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-center gap-2 mb-3">
-                <motion.span key={msgIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="text-sm text-gray-500">{messages[msgIndex]}</motion.span>
-                <span className="flex gap-0.5">
-                  {[0, 1, 2].map(i => (
-                    <motion.span key={i} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} className="w-1.5 h-1.5 rounded-full bg-primary" />
-                  ))}
-                </span>
-              </div>
-              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <motion.div animate={{ x: ['-100%', '200%'] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }} className="w-1/2 h-full rounded-full bg-primary" />
-              </div>
-
-              <button onClick={() => setShowCancel(true)} className="w-full mt-4 py-3 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
-                Cancel Ride
-              </button>
-            </>
-          )}
-        </motion.div>
-      </div>
+            </motion.div>
+          </div>
+        </>
+      )}
 
       <AnimatePresence>
         {showCancel && (

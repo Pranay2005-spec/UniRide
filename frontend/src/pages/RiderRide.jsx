@@ -81,8 +81,10 @@ export default function RiderRide() {
   const [verifyMsg, setVerifyMsg] = useState('');
   const [showReview, setShowReview] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
+  const [sheetExpanded, setSheetExpanded] = useState(false);
   const reviewRideIdRef = useRef(null);
   const riderPosRef = useRef(null);
+  const sheetYRef = useRef(0);
 
   // Persist active ride state across page refreshes
   useEffect(() => {
@@ -261,6 +263,17 @@ export default function RiderRide() {
       const data = await res.json();
       if (data.success) {
         setVerifyMsg('Passenger verified successfully!');
+        setRideDetails(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            passengers: prev.passengers?.map(p => {
+              const pid = p.user?._id || p.user;
+              if (pid === acceptedPassenger._id) return { ...p, verified: true };
+              return p;
+            }),
+          };
+        });
       } else {
         setVerifyMsg(data.error || 'Verification failed');
       }
@@ -338,7 +351,7 @@ export default function RiderRide() {
   return (
     <div className="pb-20 relative">
       {step === 'pick' && (
-        <div className="pb-20 relative">
+<div className="pb-20 relative">
           <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '75vh' }}>
             <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #f0fdf4 0%, #dcfce7 30%, #bbf7d0 60%, #86efac 100%)' }} />
             <div className="absolute inset-0 opacity-20" style={{ backgroundImage: `linear-gradient(90deg, #166534 1px, transparent 1px), linear-gradient(0deg, #166534 1px, transparent 1px)`, backgroundSize: '60px 60px' }} />
@@ -429,7 +442,8 @@ export default function RiderRide() {
       {step !== 'pick' && selectedCollege && (
         <>
           {otp ? (
-            <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '50vh' }}>
+            <div className="flex flex-col h-[calc(100vh-5rem)]">
+              <div className="flex-1 min-h-0 relative overflow-hidden bg-gray-100">
               <MapContainer center={[riderPos?.lat || destPos[0], riderPos?.lng || destPos[1]]} zoom={14} className="absolute inset-0 w-full h-full z-0" zoomControl={false}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <FlyToMarker position={passengerLoc?.lat ? [passengerLoc.lat, passengerLoc.lng] : (pickupPos ? [pickupPos[0], pickupPos[1]] : null)} />
@@ -442,6 +456,71 @@ export default function RiderRide() {
                 <Marker position={[selectedCollege.lat, selectedCollege.lng]} icon={customIcons.destinationIcon} />
               </MapContainer>
               <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
+            </div>
+              <div className="shrink-0 mx-4 -mt-8 relative z-20">
+                <div className="bg-white rounded-2xl border border-border shadow-sm">
+                  <button
+                    onClick={() => setSheetExpanded(prev => !prev)}
+                    className="w-full text-left px-4 py-3 flex items-center gap-3"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-text font-bold text-sm shrink-0">
+                      {acceptedPassenger.name?.[0] || '?'}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-text">{acceptedPassenger.name || 'Student'}</p>
+                      <p className="text-xs text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
+                    </div>
+                    {!isVerified ? (
+                      <button onClick={(e) => { e.stopPropagation(); handleVerifyOtp(); }} className="px-4 py-2 rounded-xl bg-primary text-text font-semibold text-xs hover:bg-primary-400 transition-colors shrink-0">
+                        Verify OTP
+                      </button>
+                    ) : (
+                      <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shrink-0">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                        Verified
+                      </div>
+                    )}
+                    <motion.svg
+                      animate={{ rotate: sheetExpanded ? 180 : 0 }}
+                      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                      className="text-gray-400 shrink-0"
+                    >
+                      <polyline points="6 9 12 15 18 9" />
+                    </motion.svg>
+                  </button>
+                  <motion.div
+                    animate={{ height: sheetExpanded ? 'auto' : 0, opacity: sheetExpanded ? 1 : 0 }}
+                    transition={{ duration: 0.2, ease: 'easeInOut' }}
+                    className="overflow-hidden"
+                  >
+                    <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                      {passengerLoc?.lat && riderPos && (
+                        <div className="text-sm">
+                          {(() => {
+                            const dist = calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng);
+                            const color = dist <= 10 ? 'text-green-600' : 'text-orange-500';
+                            return <span className={`font-medium ${color}`}>{Math.round(dist)}m away — {dist <= 10 ? 'arrived!' : 'heading to passenger'}</span>;
+                          })()}
+                        </div>
+                      )}
+                      {passengerLoc?.lat && riderPos && calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng) <= 10 && !isVerified && (
+                        <p className="text-xs text-green-600">You've arrived! Ask the passenger for their OTP.</p>
+                      )}
+                      {isVerified && (
+                        <p className="text-sm font-semibold text-green-700">Heading to {selectedCollege?.short || 'college'} →</p>
+                      )}
+                      {verifyMsg && (
+                        <p className={`text-sm ${verifyMsg.includes('success') || verifyMsg.includes('Verified') ? 'text-green-600' : 'text-red-500'}`}>
+                          {verifyMsg}
+                        </p>
+                      )}
+                      <button onClick={handleEndRide} className="w-full py-2.5 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                        End Ride
+                      </button>
+                    </div>
+                  </motion.div>
+</div>
+            </div>
             </div>
           ) : (
             <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
@@ -545,6 +624,7 @@ export default function RiderRide() {
             </div>
           )}
 
+          {!otp && (
           <div className="px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh] sm:max-h-none sm:overflow-visible">
             {verifyMsg && !otp && (
               <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 text-center">
@@ -616,30 +696,19 @@ export default function RiderRide() {
 
               {otp && acceptedPassenger && (
                 <div>
-                  {/* Passenger pickup address */}
-                  <div className="bg-white rounded-xl border border-border p-3 mb-3">
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 rounded-full bg-primary flex items-center justify-center shrink-0 mt-0.5">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-500">Pickup location</p>
-                        <p className="text-sm font-medium text-text truncate">{rideDetails?.pickup || pickupPos ? 'Passenger location' : ''}</p>
-                      </div>
+                  <div className="text-center py-2">
+                    <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 overflow-hidden flex items-center justify-center">
+                      {acceptedPassenger.profilePicture ? (
+                        <img src={acceptedPassenger.profilePicture} alt={acceptedPassenger.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-text font-bold text-xl">{acceptedPassenger.name?.[0] || '?'}</span>
+                      )}
                     </div>
-                  </div>
+                    <p className="text-base font-bold text-text">{acceptedPassenger.name || 'Student'}</p>
+                    <p className="text-sm text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
 
-                  {/* Passenger info card */}
-                  <div className="bg-primary-50 rounded-xl p-4 border border-primary text-center">
-                    <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 flex items-center justify-center text-text font-bold text-xl">
-                      {acceptedPassenger.name?.[0] || '?'}
-                    </div>
-                    <p className="text-base font-bold text-text mb-1">{acceptedPassenger.name || 'Student'}</p>
-                    <p className="text-sm text-green-700 font-medium mb-2">₹{rideDetails?.price || 30} fare</p>
-
-                    {/* Distance indicator */}
                     {passengerLoc?.lat && riderPos && (
-                      <div className="text-sm mb-2">
+                      <div className="text-sm mt-1">
                         {(() => {
                           const dist = calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng);
                           const color = dist <= 10 ? 'text-green-600' : 'text-orange-500';
@@ -648,26 +717,22 @@ export default function RiderRide() {
                       </div>
                     )}
 
-                    {/* If rider is nearby but not verified yet, show note */}
-                    {passengerLoc?.lat && riderPos && calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng) <= 10 && !isVerified && (
-                      <p className="text-xs text-green-600 mb-2">You've arrived! Ask the passenger for their OTP.</p>
-                    )}
-
-                    {/* OTP display */}
                     {isVerified ? (
-                      <div>
-                        <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-medium mb-2">
-                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                      <div className="mt-2">
+                        <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-sm font-medium">
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                           Passenger Verified
                         </div>
                         <p className="text-sm font-semibold text-green-700 mt-2">Heading to {selectedCollege?.short || 'college'} →</p>
                       </div>
                     ) : (
                       <>
-                        <p className="text-xs text-gray-500 mb-3">Ask the passenger for their OTP</p>
+                        {passengerLoc?.lat && riderPos && calcDistance(riderPos.lat, riderPos.lng, passengerLoc.lat, passengerLoc.lng) <= 10 && (
+                          <p className="text-xs text-green-600 mt-2 mb-2">You've arrived! Ask the passenger for their OTP.</p>
+                        )}
                         <button
                           onClick={handleVerifyOtp}
-                          className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
+                          className="mt-3 w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
                         >
                           Verify OTP
                         </button>
@@ -680,7 +745,7 @@ export default function RiderRide() {
                       </p>
                     )}
 
-                    <button onClick={handleEndRide} className="mt-3 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                    <button onClick={handleEndRide} className="mt-4 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
                       End Ride
                     </button>
                   </div>
@@ -688,6 +753,7 @@ export default function RiderRide() {
               )}
             </motion.div>
           </div>
+          )}
         </>
       )}
 

@@ -8,7 +8,7 @@
 - **Architecture:** Functional/procedural style (Mongoose models are the only OOP layer)
 
 ## Project Purpose
-Campus ride-sharing app connecting students (passengers) with verified student drivers (riders) for ₹30 flat fare between local colleges.
+Campus ride-sharing app connecting students (passengers) with verified student drivers (riders) for dynamic fare (distance × 4 + 10) between local colleges.
 
 ## Directory Structure
 ```

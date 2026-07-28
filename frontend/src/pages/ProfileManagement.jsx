@@ -20,6 +20,16 @@ export default function ProfileManagement() {
 
   if (!user) return null;
 
+  function handleLogout() {
+    const riderRide = sessionStorage.getItem('ur_rider_ride');
+    const passengerRide = sessionStorage.getItem('ur_ride');
+    if (riderRide || passengerRide) {
+      showToastMsg('Cannot logout while a ride is active. Please complete or cancel the ride first.', 'error');
+      return;
+    }
+    logout();
+  }
+
   function showToastMsg(message, type = 'success') {
     setToast({ visible: true, message, type });
     setTimeout(() => setToast({ visible: false, message: '', type: 'success' }), 3000);
@@ -189,7 +199,7 @@ export default function ProfileManagement() {
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden divide-y divide-border/50"
         >
-          <button onClick={logout} className="w-full flex items-center gap-3.5 px-4 py-4 hover:bg-gray-50 transition-colors text-left">
+          <button onClick={handleLogout} className="w-full flex items-center gap-3.5 px-4 py-4 hover:bg-gray-50 transition-colors text-left">
             <div className="w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 text-gray-600">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
