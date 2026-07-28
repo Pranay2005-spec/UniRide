@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
 import colleges from '../data/solapurColleges';
+import ReviewModal from '../components/ReviewModal';
 
 const messages = [
   'Finding students heading your way...',
@@ -78,6 +79,9 @@ export default function RiderRide() {
     return null;
   });
   const [verifyMsg, setVerifyMsg] = useState('');
+  const [showReview, setShowReview] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState(null);
+  const reviewRideIdRef = useRef(null);
   const riderPosRef = useRef(null);
 
   // Persist active ride state across page refreshes
@@ -289,6 +293,41 @@ export default function RiderRide() {
     setRiderPos(null);
   }
 
+  async function handleEndRide() {
+    if (!rideId) return handleDone();
+    const rideIdVal = rideId;
+    const passengerInfo = acceptedPassenger;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${rideIdVal}/complete`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (data.success) {
+        reviewRideIdRef.current = rideIdVal;
+        clearPersistedState();
+        setRideId(null);
+        setAcceptedPassenger(null);
+        setOtp(null);
+        setRideDetails(null);
+        setPickupPos(null);
+        setRiderPos(null);
+        setStep('pick');
+        setSelectedCollege(null);
+        setShowCollegeSearch(false);
+        setQuery('');
+        setVerifyMsg('');
+        if (data.showReview && passengerInfo) {
+          setReviewTarget({ _id: passengerInfo._id, name: passengerInfo.name });
+          setShowReview(true);
+        }
+      } else {
+        handleDone();
+      }
+    } catch {
+      handleDone();
+    }
+  }
+
   const destPos = selectedCollege ? [selectedCollege.lat, selectedCollege.lng] : null;
   const isVerified = rideDetails?.passengers?.find(p => {
     const pid = p.user?._id || p.user;
@@ -329,9 +368,9 @@ export default function RiderRide() {
                   )}
                 </div>
                 {selectedCollege && (
-                  <button onClick={(e) => { e.stopPropagation(); setSelectedCollege(null); }} className="text-gray-400">
+                  <span onClick={(e) => { e.stopPropagation(); setSelectedCollege(null); }} className="text-gray-400 cursor-pointer">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                  </button>
+                  </span>
                 )}
               </button>
             </div>
@@ -640,7 +679,7 @@ export default function RiderRide() {
                       </p>
                     )}
 
-                    <button onClick={handleDone} className="mt-3 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                    <button onClick={handleEndRide} className="mt-3 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
                       End Ride
                     </button>
                   </div>
@@ -650,6 +689,18 @@ export default function RiderRide() {
           </div>
         </>
       )}
+
+      <AnimatePresence>
+        {showReview && reviewTarget && (
+          <ReviewModal
+            target={reviewTarget}
+            targetRole="passenger"
+            rideId={reviewRideIdRef.current}
+            onClose={() => { setShowReview(false); setReviewTarget(null); }}
+            onSubmit={() => {}}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

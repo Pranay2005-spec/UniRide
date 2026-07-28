@@ -12,7 +12,8 @@ const routeStopSchema = new mongoose.Schema({
 }, { _id: false });
 
 const rideSchema = new mongoose.Schema({
-  driver: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  driver: { type: mongoose.Schema.Types.ObjectId, required: true, refPath: 'driverModel' },
+  driverModel: { type: String, required: true, enum: ['User', 'Rider'] },
   pickup: { type: String },
   destination: { type: String },
   route: [routeStopSchema],

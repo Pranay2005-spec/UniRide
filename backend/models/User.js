@@ -21,6 +21,8 @@ const userSchema = new mongoose.Schema({
   ridesOffered: { type: Number, default: 0 },
   ridesJoined: { type: Number, default: 0 },
   moneySaved: { type: Number, default: 0 },
+  avgRating: { type: Number, default: 0 },
+  totalReviews: { type: Number, default: 0 },
 }, { timestamps: true });
 
 userSchema.index({ phone: 1, role: 1 }, { unique: true });

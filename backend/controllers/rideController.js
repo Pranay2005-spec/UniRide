@@ -8,6 +8,7 @@ exports.createRide = async (req, res) => {
     const { pickup, destination, route, date, time, seats, price } = req.body;
     const ride = await Ride.create({
       driver: req.userId,
+      driverModel: req.userRole === 'rider' ? 'Rider' : 'User',
       pickup,
       destination,
       route: route || [],
@@ -150,6 +151,7 @@ exports.announceRide = async (req, res) => {
 
     const ride = await Ride.create({
       driver: req.userId,
+      driverModel: req.userRole === 'rider' ? 'Rider' : 'User',
       pickup: 'Current Location',
       route: [{
         college: {
@@ -290,6 +292,46 @@ exports.verifyPassengerOtp = async (req, res) => {
     }
 
     res.json({ success: true, message: 'Passenger verified' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.completeRide = async (req, res) => {
+  try {
+    // First fetch without populate to get raw driver ObjectId for existing rides
+    let rawRide = await Ride.findById(req.params.id);
+    if (!rawRide) return res.status(404).json({ error: 'Ride not found' });
+
+    // Existing rides may lack driverModel — detect and set it
+    if (!rawRide.driverModel) {
+      const driverId = rawRide.driver;
+      const rider = await Rider.findById(driverId).select('_id');
+      rawRide.driverModel = rider ? 'Rider' : 'User';
+      await rawRide.save();
+    }
+
+    const ride = await Ride.findById(req.params.id)
+      .populate('passengers.user', '_id name')
+      .populate('driver', '_id name');
+
+    if (ride.driver._id.toString() !== req.userId.toString()) return res.status(403).json({ error: 'Not your ride' });
+
+    const wasVerified = ride.passengers.some(p => p.verified);
+
+    ride.status = 'completed';
+    ride.active = false;
+    await ride.save();
+
+    if (global.io && wasVerified) {
+      global.io.to(`ride:${ride._id}`).emit('rideCompleted', {
+        rideId: ride._id,
+        driver: { _id: ride.driver._id, name: ride.driver.name },
+        passengers: ride.passengers.map(p => ({ _id: p.user._id, name: p.user.name })),
+      });
+    }
+
+    res.json({ success: true, showReview: wasVerified, ride });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -441,6 +483,7 @@ exports.acceptRequest = async (req, res) => {
 
     const ride = await Ride.create({
       driver: req.userId,
+      driverModel: req.userRole === 'rider' ? 'Rider' : 'User',
       pickup: request.pickup.address,
       route: [{
         college: request.college,

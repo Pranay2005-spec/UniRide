@@ -122,6 +122,7 @@ function setupSocketHandlers(io) {
 
         const ride = await Ride.create({
           driver: socket.userId,
+          driverModel: 'Rider',
           pickup: request.pickup.address,
           route: [{
             college: request.college,
@@ -176,15 +177,22 @@ function setupSocketHandlers(io) {
     socket.on('joinRideRoom', async (rideId) => {
       try {
         const ride = await Ride.findById(rideId);
-        if (!ride) return;
+        if (!ride) {
+          console.log(`[joinRideRoom] Ride ${rideId} not found for user ${socket.userId}`);
+          return;
+        }
 
         const isDriver = ride.driver.toString() === socket.userId.toString();
         const isPassenger = ride.passengers.some(p => p.user.toString() === socket.userId.toString());
+        console.log(`[joinRideRoom] User ${socket.userId} ride ${rideId} isDriver=${isDriver} isPassenger=${isPassenger}`);
         if (isDriver || isPassenger) {
           socket.join(`ride:${rideId}`);
+          console.log(`[joinRideRoom] User ${socket.userId} joined room ride:${rideId}`);
           socket.emit('joinedRideRoom', { rideId });
         }
-      } catch {}
+      } catch (err) {
+        console.error(`[joinRideRoom] Error for user ${socket.userId}:`, err.message);
+      }
     });
 
     // Location updates

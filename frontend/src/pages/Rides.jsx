@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
+import ReviewModal from '../components/ReviewModal';
 
 const cancelReasons = [
   { key: 'long_wait', label: 'Taking too long', icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg> },
@@ -75,8 +76,11 @@ export default function Rides() {
   const [requestError, setRequestError] = useState('');
   const [retryCount, setRetryCount] = useState(0);
   const [passengerPos, setPassengerPos] = useState(null);
+  const [showReview, setShowReview] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState(null);
   const verifiedRef = useRef(verified);
   verifiedRef.current = verified;
+  const rideIdForReview = useRef(null);
 
   // Persist state to sessionStorage
   useEffect(() => {
@@ -173,7 +177,6 @@ export default function Rides() {
         clearPersistedState();
         setPassengerPos(null);
         if (verifiedRef.current) {
-          // Was connected & verified (ride was active) → show default "no ride" page
           setMatchedRide(null);
           setOtp(null);
           setRideDetails(null);
@@ -181,11 +184,26 @@ export default function Rides() {
           setCollege(null);
           setPickup(null);
         } else {
-          // Not yet verified (rider ended before pickup) → go back to searching
           setMatchedRide(null);
           setOtp(null);
           setRideDetails(null);
         }
+      }
+    });
+
+    const unsubCompleted = on('rideCompleted', (data) => {
+      if (data.rideId === matchedRide && data.driver) {
+        rideIdForReview.current = data.rideId;
+        clearPersistedState();
+        setPassengerPos(null);
+        setMatchedRide(null);
+        setOtp(null);
+        setRideDetails(null);
+        setVerified(false);
+        setCollege(null);
+        setPickup(null);
+        setReviewTarget({ _id: data.driver._id, name: data.driver.name });
+        setShowReview(true);
       }
     });
 
@@ -206,6 +224,7 @@ export default function Rides() {
       unsubRiderLoc();
       unsubVerified();
       unsubDeactivated();
+      unsubCompleted();
       if (locWatcher != null) navigator.geolocation.clearWatch(locWatcher);
     };
   }, [matchedRide, connected]);
@@ -234,36 +253,49 @@ export default function Rides() {
 
   if (!college || !pickup) {
     return (
-      <div className="pb-20 relative">
-        <div className="relative w-full overflow-hidden" style={{ height: '60vh', background: 'linear-gradient(180deg, #f0fdf4 0%, #dcfce7 30%, #bbf7d0 60%, #86efac 100%)' }}>
-          <div className="absolute inset-0 opacity-20" style={{
-            backgroundImage: `linear-gradient(90deg, #166534 1px, transparent 1px), linear-gradient(0deg, #166534 1px, transparent 1px)`,
-            backgroundSize: '60px 60px',
-          }} />
-          <div className="absolute inset-0 opacity-10" style={{
-            backgroundImage: `linear-gradient(35deg, #166534 1.5px, transparent 1.5px), linear-gradient(-35deg, #166534 1.5px, transparent 1.5px)`,
-            backgroundSize: '120px 120px',
-          }} />
-          <div className="absolute w-24 h-16 rounded-full bg-green-300/30 left-[15%] top-[25%]" />
-          <div className="absolute w-32 h-20 rounded-full bg-green-300/25 right-[20%] top-[55%]" />
-          <div className="absolute w-40 h-28 rounded-[40%] bg-blue-300/25 right-[10%] top-[15%]" />
-          <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-        </div>
+      <>
+        <div className="pb-20 relative">
+          <div className="relative w-full overflow-hidden" style={{ height: '60vh', background: 'linear-gradient(180deg, #f0fdf4 0%, #dcfce7 30%, #bbf7d0 60%, #86efac 100%)' }}>
+            <div className="absolute inset-0 opacity-20" style={{
+              backgroundImage: `linear-gradient(90deg, #166534 1px, transparent 1px), linear-gradient(0deg, #166534 1px, transparent 1px)`,
+              backgroundSize: '60px 60px',
+            }} />
+            <div className="absolute inset-0 opacity-10" style={{
+              backgroundImage: `linear-gradient(35deg, #166534 1.5px, transparent 1.5px), linear-gradient(-35deg, #166534 1.5px, transparent 1.5px)`,
+              backgroundSize: '120px 120px',
+            }} />
+            <div className="absolute w-24 h-16 rounded-full bg-green-300/30 left-[15%] top-[25%]" />
+            <div className="absolute w-32 h-20 rounded-full bg-green-300/25 right-[20%] top-[55%]" />
+            <div className="absolute w-40 h-28 rounded-[40%] bg-blue-300/25 right-[10%] top-[15%]" />
+            <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+          </div>
 
-        <div className="px-4 -mt-12 relative z-10">
-          <div className="bg-white rounded-2xl border border-border shadow-sm p-6 text-center">
-            <div className="w-14 h-14 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+          <div className="px-4 -mt-12 relative z-10">
+            <div className="bg-white rounded-2xl border border-border shadow-sm p-6 text-center">
+              <div className="w-14 h-14 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+              </div>
+              <p className="text-base font-semibold text-text">No ride booked yet</p>
+              <p className="text-sm text-gray-400 mt-1 mb-5">Choose your pickup and destination to get started</p>
+              <button onClick={() => navigate('/app/home')} className="btn-primary flex items-center justify-center gap-2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+                Book a Ride
+              </button>
             </div>
-            <p className="text-base font-semibold text-text">No ride booked yet</p>
-            <p className="text-sm text-gray-400 mt-1 mb-5">Choose your pickup and destination to get started</p>
-            <button onClick={() => navigate('/app/home')} className="btn-primary flex items-center justify-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-              Book a Ride
-            </button>
           </div>
         </div>
-      </div>
+        <AnimatePresence>
+          {showReview && reviewTarget && (
+            <ReviewModal
+              target={reviewTarget}
+              targetRole="rider"
+              rideId={rideIdForReview.current}
+              onClose={() => { setShowReview(false); setReviewTarget(null); }}
+              onSubmit={() => {}}
+            />
+          )}
+        </AnimatePresence>
+      </>
     );
   }
 
@@ -452,6 +484,18 @@ export default function Rides() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showReview && reviewTarget && (
+          <ReviewModal
+            target={reviewTarget}
+            targetRole="rider"
+            rideId={rideIdForReview.current}
+            onClose={() => { setShowReview(false); setReviewTarget(null); }}
+            onSubmit={() => {}}
+          />
         )}
       </AnimatePresence>
     </div>

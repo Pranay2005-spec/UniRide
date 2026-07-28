@@ -13,6 +13,8 @@ const riderSchema = new mongoose.Schema({
   verificationStatus: { type: String, enum: ['not_submitted', 'pending', 'verified', 'rejected'], default: 'not_submitted' },
   ridesOffered: { type: Number, default: 0 },
   totalEarnings: { type: Number, default: 0 },
+  avgRating: { type: Number, default: 0 },
+  totalReviews: { type: Number, default: 0 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Rider', riderSchema);

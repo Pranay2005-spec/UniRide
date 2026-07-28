@@ -29,5 +29,6 @@ router.post('/:id/verify-passenger', auth, rideController.verifyPassengerOtp);
 router.get('/:id', auth, rideController.getRideById);
 router.patch('/:id/location', auth, rideController.updateLocation);
 router.patch('/:id/deactivate', auth, rideController.deactivateRide);
+router.patch('/:id/complete', auth, rideController.completeRide);
 
 module.exports = router;
