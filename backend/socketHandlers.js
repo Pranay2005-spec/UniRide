@@ -207,6 +207,43 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // Chat messages
+    socket.on('sendMessage', async (data) => {
+      if (!checkRateLimit(socket, 'sendMessage', 20)) return;
+      try {
+        const { rideId, message } = data;
+        if (!rideId || !message || !message.trim()) return;
+
+        const ride = await Ride.findById(rideId);
+        if (!ride) return;
+
+        const isDriver = ride.driver.toString() === socket.userId.toString();
+        const isPassenger = ride.passengers.some(p => p.user.toString() === socket.userId.toString());
+        if (!isDriver && !isPassenger) return;
+
+        let senderName = 'Unknown';
+        if (isDriver) {
+          const driver = await User.findById(socket.userId).select('name');
+          if (driver) senderName = driver.name;
+          else {
+            const rider = await Rider.findById(socket.userId).select('name');
+            if (rider) senderName = rider.name;
+          }
+        } else {
+          const user = await User.findById(socket.userId).select('name');
+          if (user) senderName = user.name;
+        }
+
+        io.to(`ride:${rideId}`).emit('newMessage', {
+          rideId,
+          senderId: socket.userId,
+          senderName,
+          message: message.trim(),
+          timestamp: new Date().toISOString(),
+        });
+      } catch {}
+    });
+
     // Join ride room for location sharing
     socket.on('joinRideRoom', async (rideId) => {
       try {

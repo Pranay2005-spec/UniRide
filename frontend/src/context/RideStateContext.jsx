@@ -57,6 +57,11 @@ export function RideStateProvider({ children }) {
   const [riderVerifyMsg, setRiderVerifyMsg] = useState('');
   const [riderPos, setRiderPos] = useState(null);
 
+  // === Chat state ===
+  const [chatMessages, setChatMessages] = useState([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const chatRideIdRef = useRef(null);
+
   // === Refs for stale closure safety ===
   const matchedRideRef = useRef(matchedRide);
   matchedRideRef.current = matchedRide;
@@ -144,6 +149,13 @@ export function RideStateProvider({ children }) {
       setMatchedRide(data.ride._id);
       setOtp(otpVal);
       setRideDetails(data.ride);
+      setChatMessages(prev => [...prev, {
+        _id: 'sys',
+        senderId: null,
+        senderName: 'System',
+        message: 'Ride confirmed! Chat with your rider here.',
+        timestamp: new Date().toISOString(),
+      }]);
     });
 
     const unsubVerified = on('passengerVerified', (data) => {
@@ -221,6 +233,15 @@ export function RideStateProvider({ children }) {
       setLastError(data.message || 'An error occurred');
     });
 
+    // --- Chat ---
+    const unsubNewMessage = on('newMessage', (data) => {
+      setChatMessages(prev => [...prev, data]);
+      const cr = chatRideIdRef.current;
+      if (!cr || data.rideId !== cr) {
+        setUnreadChatCount(prev => prev + 1);
+      }
+    });
+
     return () => {
       unsubMatched();
       unsubVerified();
@@ -232,6 +253,7 @@ export function RideStateProvider({ children }) {
       unsubDeactivated();
       unsubCompleted();
       unsubError();
+      unsubNewMessage();
     };
   }, [connected]);
 
@@ -284,6 +306,25 @@ export function RideStateProvider({ children }) {
       }
     }
   }, [connected]);
+
+  const sendChatMessage = useCallback((rideId, message) => {
+    if (!rideId || !message || !message.trim()) return;
+    emit('sendMessage', { rideId, message: message.trim() });
+  }, [emit]);
+
+  const clearChat = useCallback(() => {
+    setChatMessages([]);
+    setUnreadChatCount(0);
+    chatRideIdRef.current = null;
+  }, []);
+
+  // Reset chat when a new ride starts
+  useEffect(() => {
+    if (matchedRide || riderRideId) {
+      setChatMessages([]);
+      setUnreadChatCount(0);
+    }
+  }, [matchedRide, riderRideId]);
 
   // === Passenger actions ===
   const startRideRequest = useCallback((c, p, f) => {
@@ -354,6 +395,13 @@ export function RideStateProvider({ children }) {
       setRiderOtp(data.otp);
       setRiderRideDetails(data.ride);
       setRiderStep('confirmed');
+      setChatMessages(prev => [...prev, {
+        _id: 'sys',
+        senderId: null,
+        senderName: 'System',
+        message: 'Ride confirmed! Chat with your passenger here.',
+        timestamp: new Date().toISOString(),
+      }]);
       const pickup = data.pickup || passengerPickup;
       if (pickup?.position) {
         setRiderPickupPos(pickup.position);
@@ -399,6 +447,9 @@ export function RideStateProvider({ children }) {
       setRiderVerifyMsg, clearRiderState, setRiderStep,
       setRiderCollege, setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
       setRiderPickupPos, setRiderRideId,
+      // Chat
+      chatMessages, unreadChatCount, sendChatMessage, clearChat,
+      setChatMessages, setUnreadChatCount, chatRideIdRef,
     }}>
       {children}
     </RideStateContext.Provider>

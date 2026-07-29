@@ -8,6 +8,7 @@ import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
 import colleges from '../data/solapurColleges';
 import ReviewModal from '../components/ReviewModal';
+import ChatOverlay from '../components/ChatOverlay';
 
 const messages = [
   'Finding students heading your way...',
@@ -58,6 +59,7 @@ export default function RiderRide() {
     setRiderVerifyMsg, setRiderCollege, clearRiderState, setRiderStep,
     setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
     setRiderPickupPos, setRiderRideId, dismissReview,
+    chatMessages, unreadChatCount,
   } = useRideState();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -66,6 +68,7 @@ export default function RiderRide() {
   const [query, setQuery] = useState('');
   const [msgIndex, setMsgIndex] = useState(0);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [showChat, setShowChat] = useState(false);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otpInput, setOtpInput] = useState('');
 
@@ -278,6 +281,17 @@ export default function RiderRide() {
                         Verified
                       </div>
                     )}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setShowChat(true); }}
+                      className="relative w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors"
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
+                      {unreadChatCount > 0 && (
+                        <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                          {unreadChatCount > 9 ? '9+' : unreadChatCount}
+                        </span>
+                      )}
+                    </button>
                     <motion.svg
                       animate={{ rotate: sheetExpanded ? 180 : 0 }}
                       width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
@@ -590,6 +604,16 @@ export default function RiderRide() {
             rideId={reviewRideId}
             onClose={dismissReview}
             onSubmit={() => {}}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showChat && riderRideId && (
+          <ChatOverlay
+            rideId={riderRideId}
+            otherName={acceptedPassenger?.name}
+            onClose={() => setShowChat(false)}
           />
         )}
       </AnimatePresence>
