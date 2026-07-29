@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useRideState } from '../context/RideStateContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
 import colleges from '../data/solapurColleges';
@@ -26,8 +27,6 @@ function getTileUrl(lat, lng, zoom = 14) {
   return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
 }
 
-const STORAGE_KEY = 'ur_rider_ride';
-
 function FlyToMarker({ position }) {
   const map = useMap();
   useEffect(() => {
@@ -38,99 +37,35 @@ function FlyToMarker({ position }) {
   return null;
 }
 
+function calcDistance(lat1, lng1, lat2, lng2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 export default function RiderRide() {
-  const { token, user } = useAuth();
-  const { emit, on, connected } = useSocket();
+  const { token } = useAuth();
+  const { connected } = useSocket();
+  const {
+    riderStep, riderCollege, waitingPassengers, acceptedPassenger,
+    riderRideId, riderOtp, riderRideDetails, riderPickupPos,
+    riderVerifyMsg, riderPos,
+    showReview, reviewTarget, reviewRideId,
+    setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
+    riderClearVerifyMsg, riderMarkVerified, riderEndRide,
+    setRiderVerifyMsg, clearRiderState, setRiderStep,
+    setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
+    setRiderPickupPos, setRiderRideId, dismissReview,
+  } = useRideState();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const [step, setStep] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp) return 'confirmed'; } } catch {}
-    return 'pick';
-  });
-  const [selectedCollege, setSelectedCollege] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp && p.selectedCollege) return p.selectedCollege; } } catch {}
-    const id = searchParams.get('college');
-    if (id) return colleges.find(c => c.id === id) || null;
-    return null;
-  });
   const [showCollegeSearch, setShowCollegeSearch] = useState(false);
   const [query, setQuery] = useState('');
-  const [waitingPassengers, setWaitingPassengers] = useState([]);
   const [msgIndex, setMsgIndex] = useState(0);
-  const [rideId, setRideId] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId) return p.rideId; } } catch {}
-    return null;
-  });
-  const [acceptedPassenger, setAcceptedPassenger] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideId && p.otp && p.acceptedPassenger) return p.acceptedPassenger; } } catch {}
-    return null;
-  });
-  const [otp, setOtp] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.otp) return p.otp; } } catch {}
-    return null;
-  });
-  const [rideDetails, setRideDetails] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.rideDetails) return p.rideDetails; } } catch {}
-    return null;
-  });
-  const [pickupPos, setPickupPos] = useState(() => {
-    try { const s = sessionStorage.getItem(STORAGE_KEY); if (s) { const p = JSON.parse(s); if (p.pickupPos) return p.pickupPos; } } catch {}
-    return null;
-  });
-  const [verifyMsg, setVerifyMsg] = useState('');
-  const [showReview, setShowReview] = useState(false);
-  const [reviewTarget, setReviewTarget] = useState(null);
   const [sheetExpanded, setSheetExpanded] = useState(false);
-  const reviewRideIdRef = useRef(null);
-  const riderPosRef = useRef(null);
-  const sheetYRef = useRef(0);
-
-  // Persist active ride state across page refreshes
-  useEffect(() => {
-    if (rideId && otp) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        step: 'confirmed', selectedCollege, rideId, acceptedPassenger, otp, rideDetails, pickupPos,
-      }));
-    } else if (step === 'pick') {
-      sessionStorage.removeItem(STORAGE_KEY);
-    }
-  }, [step, selectedCollege, rideId, acceptedPassenger, otp, rideDetails, pickupPos]);
-
-  function calcDistance(lat1, lng1, lat2, lng2) {
-    const R = 6371000;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLng = (lng2 - lng1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  }
-
-  // After accepting, listen for passenger location via socket
-  useEffect(() => {
-    if (!rideId || !connected) return;
-
-    emit('joinRideRoom', rideId);
-
-    const unsubPassLoc = on('passengerLocation', (data) => {
-      setRideDetails(prev => {
-        if (!prev) return prev;
-        const passengers = [...(prev.passengers || [])];
-        const idx = passengers.findIndex(p => (p.user?._id || p.user) === data.userId);
-        if (idx >= 0) {
-          passengers[idx] = { ...passengers[idx], location: { lat: data.lat, lng: data.lng } };
-        }
-        return { ...prev, passengers };
-      });
-    });
-
-    return () => {
-      unsubPassLoc();
-    };
-  }, [rideId, connected]);
-
-  function clearPersistedState() {
-    sessionStorage.removeItem(STORAGE_KEY);
-  }
 
   const searchResults = query.trim()
     ? colleges.filter(c =>
@@ -139,218 +74,90 @@ export default function RiderRide() {
       ).slice(0, 8)
     : [];
 
-  // Listen for waiting passengers via socket — show only 1 closest at a time
+  // Restore college from URL param on first mount if not already set
   useEffect(() => {
-    if (step !== 'searching' || !selectedCollege || !connected) return;
-
-    emit('findRiders', { collegeId: selectedCollege.id });
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        const { latitude: lat, longitude: lng } = pos.coords;
-        riderPosRef.current = { lat, lng };
-        emit('findRiders', { collegeId: selectedCollege.id, riderLat: lat, riderLng: lng });
-      },
-      () => {},
-      { enableHighAccuracy: true, timeout: 5000 }
-    );
-
-    const unsubWaiting = on('waitingPassengers', (requests) => {
-      setWaitingPassengers(requests);
-    });
-
-    const unsubNew = on('newPassenger', (request) => {
-      setWaitingPassengers(prev => {
-        if (prev.some(p => p._id === request._id)) return prev;
-        const newReq = { ...request };
-        const pos = riderPosRef.current;
-        if (pos && request.pickup?.position) {
-          newReq.distance = Math.round(calcDistance(pos.lat, pos.lng, request.pickup.position[0], request.pickup.position[1]));
-        }
-        const updated = [...prev, newReq];
-        updated.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
-        return updated;
-      });
-    });
-
-    const unsubCancelled = on('passengerCancelled', (data) => {
-      setWaitingPassengers(prev => prev.filter(p => p._id !== data.requestId));
-    });
-
-    const unsubAccepted = on('passengerAccepted', (data) => {
-      setWaitingPassengers(prev => prev.filter(p => p._id !== data.requestId));
-    });
-
-    return () => {
-      unsubWaiting();
-      unsubNew();
-      unsubCancelled();
-      unsubAccepted();
-      emit('stopFindRiders', selectedCollege.id);
-    };
-  }, [step, selectedCollege, connected]);
+    if (!riderCollege) {
+      const id = searchParams.get('college');
+      if (id) {
+        const col = colleges.find(c => c.id === Number(id));
+        if (col) setRiderCollegeAndSearch(col);
+      }
+    }
+  }, []);
 
   // Message rotation while searching
   useEffect(() => {
-    if (step !== 'searching') return;
+    if (riderStep !== 'searching') return;
     const interval = setInterval(() => {
       setMsgIndex(prev => (prev + 1) % messages.length);
     }, 2500);
     return () => clearInterval(interval);
-  }, [step]);
-
-  const [riderPos, setRiderPos] = useState(null);
-
-  // After accepting, send live location via socket
-  useEffect(() => {
-    if (!rideId || !otp || !connected) return;
-    if (!navigator.geolocation) return;
-
-    const onPosition = (pos) => {
-      const lat = pos.coords.latitude;
-      const lng = pos.coords.longitude;
-      setRiderPos({ lat, lng });
-      emit('updateLocation', { rideId, lat, lng });
-    };
-
-    const onError = () => {};
-
-    const watcher = navigator.geolocation.watchPosition(onPosition, onError, {
-      enableHighAccuracy: true, timeout: 10000, maximumAge: 3000,
-    });
-
-    return () => navigator.geolocation.clearWatch(watcher);
-  }, [rideId, otp, connected]);
+  }, [riderStep]);
 
   async function handleFindRiders() {
-    if (!selectedCollege) return;
-    setStep('searching');
-    setWaitingPassengers([]);
+    if (!riderCollege) return;
+    setRiderCollegeAndSearch(riderCollege);
   }
 
   function handleConfirmRide(requestId, passengerData, passengerPickup) {
-    setVerifyMsg('');
-    let cleanup = () => {};
-    const unsubError = on('error', (data) => {
-      setVerifyMsg(data.message || 'Failed to accept request');
-      cleanup();
-    });
-    const unsubAccepted = on('requestAccepted', (data) => {
-      setRideId(data.ride._id);
-      setAcceptedPassenger(passengerData);
-      setOtp(data.otp);
-      setRideDetails(data.ride);
-      setStep('confirmed');
-      const pickup = data.pickup || passengerPickup;
-      if (pickup?.position) {
-        setPickupPos(pickup.position);
-      }
-      cleanup();
-    });
-    cleanup = () => { unsubError(); unsubAccepted(); };
-    emit('acceptRequest', requestId);
+    riderAcceptRequest(requestId, passengerData, passengerPickup);
   }
 
   async function handleVerifyOtp() {
-    if (!rideId || !acceptedPassenger) return;
+    if (!riderRideId || !acceptedPassenger) return;
     const otpInput = prompt('Enter the OTP shown by the passenger:');
     if (!otpInput) return;
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${rideId}/verify-passenger`, {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideId}/verify-passenger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ passengerId: acceptedPassenger._id, otp: otpInput }),
       });
       const data = await res.json();
       if (data.success) {
-        setVerifyMsg('Passenger verified successfully!');
-        setRideDetails(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            passengers: prev.passengers?.map(p => {
-              const pid = p.user?._id || p.user;
-              if (pid === acceptedPassenger._id) return { ...p, verified: true };
-              return p;
-            }),
-          };
-        });
+        setRiderVerifyMsg('Passenger verified successfully!');
+        riderMarkVerified();
       } else {
-        setVerifyMsg(data.error || 'Verification failed');
+        setRiderVerifyMsg(data.error || 'Verification failed');
       }
     } catch {
-      setVerifyMsg('Network error');
+      setRiderVerifyMsg('Network error');
     }
   }
 
   function handleDone() {
-    if (step === 'searching' && selectedCollege) {
-      emit('stopFindRiders', selectedCollege.id);
+    if (riderStep === 'searching' && riderCollege) {
+      stopFindRiders(riderCollege.id);
     }
-    if (rideId) {
-      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${rideId}/deactivate`, {
+    if (riderRideId) {
+      fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideId}/deactivate`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       }).catch(() => {});
     }
-    clearPersistedState();
-    setStep('pick');
-    setSelectedCollege(null);
-    setRideId(null);
-    setAcceptedPassenger(null);
-    setOtp(null);
+    riderEndRide();
     setShowCollegeSearch(false);
     setQuery('');
-    setWaitingPassengers([]);
-    setRideDetails(null);
-    setPickupPos(null);
-    setVerifyMsg('');
-    setRiderPos(null);
   }
 
   async function handleEndRide() {
-    if (!rideId) return handleDone();
-    const rideIdVal = rideId;
-    const passengerInfo = acceptedPassenger;
+    if (!riderRideId) return handleDone();
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${rideIdVal}/complete`, {
+      await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideId}/complete`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       });
-      const data = await res.json();
-      if (data.success) {
-        reviewRideIdRef.current = rideIdVal;
-        clearPersistedState();
-        setRideId(null);
-        setAcceptedPassenger(null);
-        setOtp(null);
-        setRideDetails(null);
-        setPickupPos(null);
-        setRiderPos(null);
-        setStep('pick');
-        setSelectedCollege(null);
-        setShowCollegeSearch(false);
-        setQuery('');
-        setVerifyMsg('');
-        if (data.showReview && passengerInfo) {
-          setReviewTarget({ _id: passengerInfo._id, name: passengerInfo.name });
-          setShowReview(true);
-        }
-      } else {
-        handleDone();
-      }
-    } catch {
-      handleDone();
-    }
+    } catch {}
   }
 
-  const destPos = selectedCollege ? [selectedCollege.lat, selectedCollege.lng] : null;
-  const isVerified = rideDetails?.passengers?.find(p => {
+  const destPos = riderCollege ? [riderCollege.lat, riderCollege.lng] : null;
+  const isVerified = riderRideDetails?.passengers?.find(p => {
     const pid = p.user?._id || p.user;
     return pid === acceptedPassenger?._id;
   })?.verified;
-  const passengerLoc = rideDetails?.passengers?.[0]?.location;
+  const passengerLoc = riderRideDetails?.passengers?.[0]?.location;
 
   return (
     <div className="pb-20 relative">
-      {step === 'pick' && (
+      {riderStep === 'pick' && (
 <div className="pb-20 relative">
           <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '75vh' }}>
             <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, #f0fdf4 0%, #dcfce7 30%, #bbf7d0 60%, #86efac 100%)' }} />
@@ -371,17 +178,17 @@ export default function RiderRide() {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
                 </div>
                 <div className="flex-1 min-w-0 text-left">
-                  {selectedCollege ? (
+                  {riderCollege ? (
                     <div>
-                      <p className="text-sm font-medium text-text">{selectedCollege.short}</p>
-                      <p className="text-xs text-gray-500 truncate">{selectedCollege.name}</p>
+                      <p className="text-sm font-medium text-text">{riderCollege.short}</p>
+                      <p className="text-xs text-gray-500 truncate">{riderCollege.name}</p>
                     </div>
                   ) : (
                     <span className="text-gray-400 text-sm">Where are you heading?</span>
                   )}
                 </div>
-                {selectedCollege && (
-                  <span onClick={(e) => { e.stopPropagation(); setSelectedCollege(null); }} className="text-gray-400 cursor-pointer">
+                {riderCollege && (
+                  <span onClick={(e) => { e.stopPropagation(); clearRiderState(); }} className="text-gray-400 cursor-pointer">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </span>
                 )}
@@ -407,7 +214,7 @@ export default function RiderRide() {
                   {searchResults.map(c => (
                     <button
                       key={c.id}
-                      onClick={() => { setSelectedCollege(c); setShowCollegeSearch(false); setQuery(''); }}
+                      onClick={() => { setRiderCollegeAndSearch(c); setShowCollegeSearch(false); setQuery(''); }}
                       className="w-full text-left px-3 py-2.5 hover:bg-primary-50 transition-colors flex items-center gap-2.5"
                     >
                       <div className="w-6 h-6 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
@@ -424,7 +231,7 @@ export default function RiderRide() {
             </motion.div>
           )}
 
-          {selectedCollege && (
+          {riderCollege && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -439,21 +246,21 @@ export default function RiderRide() {
         </div>
       )}
 
-      {step !== 'pick' && selectedCollege && (
+      {riderStep !== 'pick' && riderCollege && (
         <>
-          {otp ? (
+          {riderOtp ? (
             <div className="flex flex-col h-[calc(100vh-5rem)]">
               <div className="flex-1 min-h-0 relative overflow-hidden bg-gray-100">
               <MapContainer center={[riderPos?.lat || destPos[0], riderPos?.lng || destPos[1]]} zoom={14} className="absolute inset-0 w-full h-full z-0" zoomControl={false}>
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <FlyToMarker position={passengerLoc?.lat ? [passengerLoc.lat, passengerLoc.lng] : (pickupPos ? [pickupPos[0], pickupPos[1]] : null)} />
+                <FlyToMarker position={passengerLoc?.lat ? [passengerLoc.lat, passengerLoc.lng] : (riderPickupPos ? [riderPickupPos[0], riderPickupPos[1]] : null)} />
                 {riderPos && <Marker position={[riderPos.lat, riderPos.lng]} icon={customIcons.riderIcon} />}
                 {passengerLoc?.lat ? (
                   <Marker position={[passengerLoc.lat, passengerLoc.lng]} icon={customIcons.passengerIcon} />
-                ) : pickupPos ? (
-                  <Marker position={[pickupPos[0], pickupPos[1]]} icon={customIcons.passengerIcon} />
+                ) : riderPickupPos ? (
+                  <Marker position={[riderPickupPos[0], riderPickupPos[1]]} icon={customIcons.passengerIcon} />
                 ) : null}
-                <Marker position={[selectedCollege.lat, selectedCollege.lng]} icon={customIcons.destinationIcon} />
+                <Marker position={[riderCollege.lat, riderCollege.lng]} icon={customIcons.destinationIcon} />
               </MapContainer>
               <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
             </div>
@@ -464,11 +271,11 @@ export default function RiderRide() {
                     className="w-full text-left px-4 py-3 flex items-center gap-3"
                   >
                     <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-text font-bold text-sm shrink-0">
-                      {acceptedPassenger.name?.[0] || '?'}
+                      {acceptedPassenger?.name?.[0] || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-text">{acceptedPassenger.name || 'Student'}</p>
-                      <p className="text-xs text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
+                      <p className="text-sm font-semibold text-text">{acceptedPassenger?.name || 'Student'}</p>
+                      <p className="text-xs text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
                     </div>
                     {!isVerified ? (
                       <button onClick={(e) => { e.stopPropagation(); handleVerifyOtp(); }} className="px-4 py-2 rounded-xl bg-primary text-text font-semibold text-xs hover:bg-primary-400 transition-colors shrink-0">
@@ -507,11 +314,11 @@ export default function RiderRide() {
                         <p className="text-xs text-green-600">You've arrived! Ask the passenger for their OTP.</p>
                       )}
                       {isVerified && (
-                        <p className="text-sm font-semibold text-green-700">Heading to {selectedCollege?.short || 'college'} →</p>
+                        <p className="text-sm font-semibold text-green-700">Heading to {riderCollege?.short || 'college'} →</p>
                       )}
-                      {verifyMsg && (
-                        <p className={`text-sm ${verifyMsg.includes('success') || verifyMsg.includes('Verified') ? 'text-green-600' : 'text-red-500'}`}>
-                          {verifyMsg}
+                      {riderVerifyMsg && (
+                        <p className={`text-sm ${riderVerifyMsg.includes('success') || riderVerifyMsg.includes('Verified') ? 'text-green-600' : 'text-red-500'}`}>
+                          {riderVerifyMsg}
                         </p>
                       )}
                       <button onClick={handleEndRide} className="w-full py-2.5 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
@@ -531,7 +338,6 @@ export default function RiderRide() {
                 <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
               </div>
 
-              {/* Route line: pickup -> college */}
               {destPos && (
                 <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
                   <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
@@ -549,7 +355,6 @@ export default function RiderRide() {
                 </svg>
               )}
 
-              {/* Rider location marker */}
               {riderPos && (
                 <div className="absolute z-10" style={{
                   left: `${((riderPos.lng - destPos[1]) / 0.02 + 50)}%`,
@@ -561,11 +366,10 @@ export default function RiderRide() {
                 </div>
               )}
 
-              {/* Passenger pickup marker */}
-              {pickupPos && !passengerLoc?.lat && (
+              {riderPickupPos && !passengerLoc?.lat && (
                 <div className="absolute z-10" style={{
-                  left: `${((pickupPos[1] - destPos[1]) / 0.02 + 50)}%`,
-                  top: `${(50 - (pickupPos[0] - destPos[0]) / 0.02)}%`,
+                  left: `${((riderPickupPos[1] - destPos[1]) / 0.02 + 50)}%`,
+                  top: `${(50 - (riderPickupPos[0] - destPos[0]) / 0.02)}%`,
                 }}>
                   <div className="w-10 h-10 rounded-full bg-orange-400 flex items-center justify-center shadow-lg border-2 border-white">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
@@ -574,7 +378,6 @@ export default function RiderRide() {
                 </div>
               )}
 
-              {/* Passenger live location marker */}
               {passengerLoc?.lat && (
                 <div className="absolute z-10" style={{
                   left: `${((passengerLoc.lng - destPos[1]) / 0.02 + 50)}%`,
@@ -587,7 +390,6 @@ export default function RiderRide() {
                 </div>
               )}
 
-              {/* Destination marker */}
               <div className="absolute z-[6]" style={{ left: '86%', top: '10%' }}>
                 <svg width="32" height="32" viewBox="0 0 200 200" fill="none">
                   <rect x="25" y="75" width="150" height="105" rx="3" stroke="#22C55E" strokeWidth="3" fill="rgba(34,197,94,0.1)" />
@@ -605,8 +407,7 @@ export default function RiderRide() {
                 </svg>
               </div>
 
-              {/* Animated vehicle moving along route when searching */}
-              {!otp && (
+              {!riderOtp && (
                 <motion.div
                   className="absolute z-10 pointer-events-none"
                   style={{ left: '10%', top: '80%' }}
@@ -624,11 +425,11 @@ export default function RiderRide() {
             </div>
           )}
 
-          {!otp && (
+          {!riderOtp && (
           <div className="px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh] sm:max-h-none sm:overflow-visible">
-            {verifyMsg && !otp && (
+            {riderVerifyMsg && !riderOtp && (
               <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 text-center">
-                {verifyMsg}
+                {riderVerifyMsg}
               </motion.div>
             )}
             <motion.div
@@ -644,11 +445,11 @@ export default function RiderRide() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text">Your Location</p>
-                  <p className="text-sm text-gray-500 truncate">{selectedCollege.short}</p>
+                  <p className="text-sm text-gray-500 truncate">{riderCollege.short}</p>
                 </div>
               </div>
 
-              {step === 'searching' && waitingPassengers.length === 0 && (
+              {riderStep === 'searching' && waitingPassengers.length === 0 && (
                 <>
                   <div className="flex items-center justify-center gap-2 mb-3">
                     <motion.span key={msgIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="text-sm text-gray-500">{messages[msgIndex]}</motion.span>
@@ -665,7 +466,7 @@ export default function RiderRide() {
                 </>
               )}
 
-              {step === 'searching' && waitingPassengers.length > 0 && !otp && (
+              {riderStep === 'searching' && waitingPassengers.length > 0 && !riderOtp && (
                 <div className="space-y-3">
                   <div className="bg-green-50 rounded-xl p-4 border border-green-200">
                     <div className="flex items-center gap-3 mb-3">
@@ -675,7 +476,7 @@ export default function RiderRide() {
                       <div className="flex-1">
                         <p className="text-base font-semibold text-text">{waitingPassengers[0].passenger.name || 'Student'}</p>
                         <p className="text-xs text-gray-500">{waitingPassengers[0].pickup.address}</p>
-                        <p className="text-sm text-green-700 font-medium mt-0.5">₹{waitingPassengers[0].price ?? rideDetails?.price ?? FARE} fare</p>
+                        <p className="text-sm text-green-700 font-medium mt-0.5">₹{waitingPassengers[0].price ?? riderRideDetails?.price ?? FARE} fare</p>
                         {waitingPassengers[0].distance != null && (
                           <p className="text-xs text-gray-400 mt-0.5">{waitingPassengers[0].distance >= 1000 ? (waitingPassengers[0].distance / 1000).toFixed(1) + ' km' : waitingPassengers[0].distance + ' m'} away</p>
                         )}
@@ -694,7 +495,7 @@ export default function RiderRide() {
                 </div>
               )}
 
-              {otp && acceptedPassenger && (
+              {riderOtp && acceptedPassenger && (
                 <div>
                   <div className="text-center py-2">
                     <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 overflow-hidden flex items-center justify-center">
@@ -705,7 +506,7 @@ export default function RiderRide() {
                       )}
                     </div>
                     <p className="text-base font-bold text-text">{acceptedPassenger.name || 'Student'}</p>
-                    <p className="text-sm text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
+                    <p className="text-sm text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
 
                     {passengerLoc?.lat && riderPos && (
                       <div className="text-sm mt-1">
@@ -723,7 +524,7 @@ export default function RiderRide() {
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                           Passenger Verified
                         </div>
-                        <p className="text-sm font-semibold text-green-700 mt-2">Heading to {selectedCollege?.short || 'college'} →</p>
+                        <p className="text-sm font-semibold text-green-700 mt-2">Heading to {riderCollege?.short || 'college'} →</p>
                       </div>
                     ) : (
                       <>
@@ -739,9 +540,9 @@ export default function RiderRide() {
                       </>
                     )}
 
-                    {verifyMsg && (
-                      <p className={`text-sm mt-2 ${verifyMsg.includes('success') || verifyMsg.includes('Verified') ? 'text-green-600' : 'text-red-500'}`}>
-                        {verifyMsg}
+                    {riderVerifyMsg && (
+                      <p className={`text-sm mt-2 ${riderVerifyMsg.includes('success') || riderVerifyMsg.includes('Verified') ? 'text-green-600' : 'text-red-500'}`}>
+                        {riderVerifyMsg}
                       </p>
                     )}
 
@@ -762,8 +563,8 @@ export default function RiderRide() {
           <ReviewModal
             target={reviewTarget}
             targetRole="passenger"
-            rideId={reviewRideIdRef.current}
-            onClose={() => { setShowReview(false); setReviewTarget(null); }}
+            rideId={reviewRideId}
+            onClose={dismissReview}
             onSubmit={() => {}}
           />
         )}

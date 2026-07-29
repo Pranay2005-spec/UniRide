@@ -12,7 +12,7 @@ function calcDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-const MAX_DISTANCE = 5000;
+const MAX_DISTANCE = 2000;
 
 function setupSocketHandlers(io) {
   io.use((socket, next) => {
@@ -142,11 +142,11 @@ function setupSocketHandlers(io) {
         request.matchedRide = ride._id;
         await request.save();
 
-        await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: 30 } });
+        await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: request.price || 30 } });
 
         let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture');
         if (!driverUser) {
-          driverUser = await Rider.findById(socket.userId).select('name');
+          driverUser = await Rider.findById(socket.userId).select('name profilePicture');
         }
 
         io.to(`user:${request.passenger._id}`).emit('matched', {

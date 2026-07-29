@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useRideState } from '../context/RideStateContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
 import ReviewModal from '../components/ReviewModal';
@@ -42,64 +43,24 @@ function FlyToMarker({ position }) {
 }
 
 export default function Rides() {
-  const { token, role, user } = useAuth();
-  const { emit, on, connected } = useSocket();
+  const { role } = useAuth();
+  const { connected } = useSocket();
+  const {
+    searching, matchedRide, otp, rideDetails, verified,
+    college, pickup, fare, passengerPos, lastError,
+    showReview, reviewTarget, reviewRideId,
+    startRideRequest, cancelRideRequest, retryRideRequest,
+    dismissReview,
+  } = useRideState();
   const navState = useLocation().state;
   const navigate = useNavigate();
-  const [college, setCollege] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.college) return p.college; } } catch {}
-    return navState?.college;
-  });
-  const [pickup, setPickup] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.pickup) return p.pickup; } } catch {}
-    return navState?.pickup;
-  });
-  const [fare, setFare] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.fare) return p.fare; } } catch {}
-    return navState?.fare;
-  });
   const [msgIndex, setMsgIndex] = useState(0);
-  const [matchedRide, setMatchedRide] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.matchedRide) return p.matchedRide; } } catch {}
-    return null;
-  });
-  const [otp, setOtp] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.otp) return p.otp; } } catch {}
-    return null;
-  });
   const [showCancel, setShowCancel] = useState(false);
-  const [rideDetails, setRideDetails] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.rideDetails) return p.rideDetails; } } catch {}
-    return null;
-  });
-  const [verified, setVerified] = useState(() => {
-    try { const s = sessionStorage.getItem('ur_ride'); if (s) { const p = JSON.parse(s); if (p.verified) return p.verified; } } catch {}
-    return false;
-  });
-  const [redirecting, setRedirecting] = useState(false);
-  const [requestError, setRequestError] = useState('');
-  const [retryCount, setRetryCount] = useState(0);
-  const [passengerPos, setPassengerPos] = useState(null);
-  const [showReview, setShowReview] = useState(false);
-  const [reviewTarget, setReviewTarget] = useState(null);
   const [sheetExpanded, setSheetExpanded] = useState(false);
-  const verifiedRef = useRef(verified);
-  verifiedRef.current = verified;
-  const rideIdForReview = useRef(null);
+  const [redirecting, setRedirecting] = useState(false);
+  const [initializing, setInitializing] = useState(!!navState?.college);
 
-  // Persist state to sessionStorage
-  useEffect(() => {
-    if (matchedRide || college) {
-      sessionStorage.setItem('ur_ride', JSON.stringify({ matchedRide, otp, college, pickup, fare, verified, rideDetails }));
-    }
-  }, [matchedRide, otp, college, pickup, fare, verified, rideDetails]);
-
-  function clearPersistedState() {
-    sessionStorage.removeItem('ur_ride');
-  }
-
-  const pickupPos = pickup?.position;
-
+  // Redirect riders to their page
   useEffect(() => {
     if (role === 'rider') {
       setRedirecting(true);
@@ -109,6 +70,9 @@ export default function Rides() {
 
   if (redirecting) return null;
 
+  const pickupPos = pickup?.position;
+
+  // Rotate searching messages
   useEffect(() => {
     if (!college || !pickup) return;
     const interval = setInterval(() => {
@@ -117,187 +81,25 @@ export default function Rides() {
     return () => clearInterval(interval);
   }, [college, pickup]);
 
-  // On mount, verify persisted match is still valid
+  // Start ride request — from navState on fresh navigation, or resume existing
   useEffect(() => {
-    (async () => {
-      const s = sessionStorage.getItem('ur_ride');
-      if (!s || !connected) return;
-      let parsed;
-      try { parsed = JSON.parse(s); } catch { return; }
-      if (!parsed.matchedRide) return;
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/my-match`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        if (!data.matched) {
-          clearPersistedState();
-          setMatchedRide(null);
-          setOtp(null);
-          setRideDetails(null);
-          setVerified(false);
-        } else if (data.otp) {
-          setOtp(data.otp);
-          setVerified(data.verified);
-          sessionStorage.setItem('ur_ride', JSON.stringify({
-            ...JSON.parse(s),
-            otp: data.otp,
-            verified: data.verified,
-          }));
-        }
-      } catch {}
-    })();
-  }, [connected]);
-
-  // Create ride request via socket, listen for match
-  useEffect(() => {
-    if (!college?.id || !pickup || !connected) return;
-    if (matchedRide && !navState?.college) return;
-
-    // Clear any stale state when starting fresh from nav
-    if (navState?.college && !matchedRide) {
-      clearPersistedState();
-      setOtp(null);
-      setRideDetails(null);
-      setVerified(false);
-      setFare(navState?.fare);
-    }
-
-    // Already matched — don't re-emit or clear
+    if (!connected) return;
     if (matchedRide) return;
+    if (searching) return;
 
-    const unsubError = on('error', (data) => {
-      setRequestError(data.message || 'Failed to request ride');
-    });
-
-    const unsubMatched = on('matched', (data) => {
-      const otpVal = data?.otp || data?.ride?.otp;
-      if (!data?.ride?._id || !otpVal) return;
-      setMatchedRide(data.ride._id);
-      setOtp(otpVal);
-      setRideDetails(data.ride);
-      sessionStorage.setItem('ur_ride', JSON.stringify({
-        matchedRide: data.ride._id,
-        otp: otpVal,
-        college,
-        pickup,
-        fare,
-        verified: false,
-        rideDetails: data.ride,
-      }));
-    });
-
-    emit('requestRide', { college, pickup, fare });
-
-    return () => {
-      unsubError();
-      unsubMatched();
-    };
-  }, [college?.id, pickup?.address, connected, retryCount]);
-
-  // Cancel pending request on unmount only (if not matched)
-  const wasMatched = useRef(false);
-  wasMatched.current = matchedRide;
-  useEffect(() => {
-    return () => {
-      if (!wasMatched.current) {
-        emit('cancelRequest');
-      }
-    };
-  }, []);
+    if (navState?.college && navState?.pickup) {
+      startRideRequest(navState.college, navState.pickup, navState.fare);
+      setInitializing(false);
+    } else if (college?.id && pickup) {
+      startRideRequest(college, pickup, fare);
+    }
+  }, [connected]);
 
   function handleCancel(reason) {
     setShowCancel(false);
-    emit('cancelRequest');
-    clearPersistedState();
-    setMatchedRide(null);
-    setOtp(null);
+    cancelRideRequest();
     navigate('/app/home');
   }
-
-  // After matching, listen for rider location, share passenger location, and listen for verification
-  useEffect(() => {
-    if (!matchedRide || !connected) return;
-
-    emit('joinRideRoom', matchedRide);
-
-    const unsubRiderLoc = on('riderLocation', (data) => {
-      setRideDetails(prev => prev ? { ...prev, currentLocation: { lat: data.lat, lng: data.lng } } : prev);
-    });
-
-    const unsubVerified = on('passengerVerified', (data) => {
-      if (data.rideId === matchedRide) {
-        setVerified(true);
-        setRideDetails(prev => prev ? { ...prev, verified: true } : prev);
-      }
-    });
-
-    const unsubDeactivated = on('rideDeactivated', (data) => {
-      if (data.rideId === matchedRide) {
-        clearPersistedState();
-        setPassengerPos(null);
-        setMatchedRide(null);
-        setOtp(null);
-        setRideDetails(null);
-        setVerified(false);
-      }
-    });
-
-    const unsubCompleted = on('rideCompleted', (data) => {
-      if (data.rideId === matchedRide) {
-        rideIdForReview.current = data.rideId;
-        clearPersistedState();
-        setPassengerPos(null);
-        setMatchedRide(null);
-        setOtp(null);
-        setRideDetails(null);
-        setVerified(false);
-        setCollege(null);
-        setPickup(null);
-        if (data.showReview && data.driver) {
-          setReviewTarget({ _id: data.driver._id, name: data.driver.name });
-          setShowReview(true);
-        }
-      }
-    });
-
-    let locWatcher = null;
-    if (navigator.geolocation) {
-      locWatcher = navigator.geolocation.watchPosition(
-        (pos) => {
-          const { latitude: lat, longitude: lng } = pos.coords;
-          setPassengerPos({ lat, lng });
-          emit('updateLocation', { rideId: matchedRide, lat, lng });
-        },
-        () => {},
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
-      );
-    }
-
-    return () => {
-      unsubRiderLoc();
-      unsubVerified();
-      unsubDeactivated();
-      unsubCompleted();
-      if (locWatcher != null) navigator.geolocation.clearWatch(locWatcher);
-    };
-  }, [matchedRide, connected]);
-
-  // Reset to default view on connection loss while ride is active
-  useEffect(() => {
-    if (!connected && matchedRide) {
-      clearPersistedState();
-      setMatchedRide(null);
-      setOtp(null);
-      setRideDetails(null);
-      setVerified(false);
-      setPassengerPos(null);
-      if (verifiedRef.current) {
-        setCollege(null);
-        setPickup(null);
-      }
-    }
-  }, [connected]);
 
   const driver = rideDetails?.driver;
   const driverPos = rideDetails?.currentLocation?.lat != null
@@ -306,6 +108,22 @@ export default function Rides() {
   const mapCenter = driverPos || [college?.lat || 17.68, college?.lng || 75.91];
 
   if (!college || !pickup) {
+    if (initializing) {
+      return (
+        <div className="pb-20 relative min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-primary/10 flex items-center justify-center">
+              <span className="flex gap-0.5">
+                {[0, 1, 2].map(i => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: `pulse 1.2s ease-in-out infinite ${i * 0.2}s` }} />
+                ))}
+              </span>
+            </div>
+            <p className="text-sm text-gray-500">Connecting to nearby drivers...</p>
+          </div>
+        </div>
+      );
+    }
     return (
       <>
         <div className="pb-20 relative">
@@ -338,22 +156,20 @@ export default function Rides() {
             </div>
           </div>
         </div>
-        <AnimatePresence>
-          {showReview && reviewTarget && (
-            <ReviewModal
-              target={reviewTarget}
-              targetRole="rider"
-              rideId={rideIdForReview.current}
-              onClose={() => { setShowReview(false); setReviewTarget(null); }}
-              onSubmit={() => {}}
-            />
-          )}
-        </AnimatePresence>
+        {showReview && reviewTarget && (
+          <ReviewModal
+            target={reviewTarget}
+            targetRole="rider"
+            rideId={reviewRideId}
+            onClose={dismissReview}
+            onSubmit={() => {}}
+          />
+        )}
       </>
     );
   }
 
-return (
+  return (
     <div className="pb-20 relative">
       {matchedRide ? (
         <div className="flex flex-col h-[calc(100vh-5rem)]">
@@ -500,13 +316,13 @@ return (
               animate={{ opacity: 1, y: 0 }}
               className="bg-white rounded-2xl border border-border shadow-sm p-4"
             >
-              {requestError ? (
+              {lastError ? (
                 <div className="text-center py-4">
                   <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-3">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="15" y1="9" x2="9" y2="15" /><line x1="9" y1="9" x2="15" y2="15" /></svg>
                   </div>
-                  <p className="text-sm text-red-500 mb-3">{requestError}</p>
-                  <button onClick={() => { setRequestError(''); setRetryCount(c => c + 1); }} className="btn-primary !py-2.5 !text-sm">
+                  <p className="text-sm text-red-500 mb-3">{lastError}</p>
+                  <button onClick={retryRideRequest} className="btn-primary !py-2.5 !text-sm">
                     Try Again
                   </button>
                 </div>
@@ -573,8 +389,8 @@ return (
           <ReviewModal
             target={reviewTarget}
             targetRole="rider"
-            rideId={rideIdForReview.current}
-            onClose={() => { setShowReview(false); setReviewTarget(null); }}
+            rideId={reviewRideId}
+            onClose={dismissReview}
             onSubmit={() => {}}
           />
         )}

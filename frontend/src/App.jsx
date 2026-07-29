@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
+import { RideStateProvider } from './context/RideStateContext';
 import BottomNav from './components/BottomNav';
 import LoadingSkeleton from './components/LoadingSkeleton';
 
@@ -67,6 +68,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SocketProvider>
+          <RideStateProvider>
           <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><LoadingSkeleton count={1} type="profile" /></div>}>
             <Routes>
               <Route path="/" element={<AuthRedirect />} />
@@ -126,6 +128,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
+          </RideStateProvider>
         </SocketProvider>
       </AuthProvider>
     </BrowserRouter>
