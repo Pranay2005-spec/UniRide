@@ -55,7 +55,7 @@ export default function RiderRide() {
     showReview, reviewTarget, reviewRideId,
     setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
     riderClearVerifyMsg, riderMarkVerified, riderEndRide,
-    setRiderVerifyMsg, clearRiderState, setRiderStep,
+    setRiderVerifyMsg, setRiderCollege, clearRiderState, setRiderStep,
     setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
     setRiderPickupPos, setRiderRideId, dismissReview,
   } = useRideState();
@@ -66,6 +66,8 @@ export default function RiderRide() {
   const [query, setQuery] = useState('');
   const [msgIndex, setMsgIndex] = useState(0);
   const [sheetExpanded, setSheetExpanded] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
 
   const searchResults = query.trim()
     ? colleges.filter(c =>
@@ -103,15 +105,19 @@ export default function RiderRide() {
     riderAcceptRequest(requestId, passengerData, passengerPickup);
   }
 
-  async function handleVerifyOtp() {
-    if (!riderRideId || !acceptedPassenger) return;
-    const otpInput = prompt('Enter the OTP shown by the passenger:');
-    if (!otpInput) return;
+  function handleVerifyOtp() {
+    setOtpInput('');
+    setShowOtpModal(true);
+  }
+
+  async function submitOtp() {
+    if (!riderRideId || !acceptedPassenger || !otpInput.trim()) return;
+    setShowOtpModal(false);
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideId}/verify-passenger`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ passengerId: acceptedPassenger._id, otp: otpInput }),
+        body: JSON.stringify({ passengerId: acceptedPassenger._id, otp: otpInput.trim() }),
       });
       const data = await res.json();
       if (data.success) {
@@ -146,6 +152,7 @@ export default function RiderRide() {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       });
     } catch {}
+    riderEndRide();
   }
 
   const destPos = riderCollege ? [riderCollege.lat, riderCollege.lng] : null;
@@ -170,66 +177,50 @@ export default function RiderRide() {
 
           <div className="absolute top-4 left-4 right-4 z-10">
             <div className="bg-white rounded-2xl shadow-md border border-border overflow-hidden">
-              <button
-                onClick={() => setShowCollegeSearch(true)}
-                className="w-full flex items-center gap-3 px-4 py-3.5"
-              >
-                <div className="w-8 h-8 rounded-full bg-success-50 flex items-center justify-center shrink-0">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                </div>
-                <div className="flex-1 min-w-0 text-left">
-                  {riderCollege ? (
-                    <div>
-                      <p className="text-sm font-medium text-text">{riderCollege.short}</p>
-                      <p className="text-xs text-gray-500 truncate">{riderCollege.name}</p>
-                    </div>
-                  ) : (
-                    <span className="text-gray-400 text-sm">Where are you heading?</span>
-                  )}
-                </div>
-                {riderCollege && (
-                  <span onClick={(e) => { e.stopPropagation(); clearRiderState(); }} className="text-gray-400 cursor-pointer">
+              {riderCollege ? (
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="w-8 h-8 rounded-full bg-success-50 flex items-center justify-center shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5"><path d="M12 22c-2 0-8-5.06-8-10a8 8 0 1 1 16 0c0 4.94-6 10-8 10z" /><circle cx="12" cy="10" r="2.5" /></svg>
+                  </div>
+                  <div className="flex-1 flex items-center gap-2 min-w-0">
+                    <span className="text-sm font-medium text-text">{riderCollege.short}</span>
+                    <span className="text-xs text-gray-400 truncate">{riderCollege.name}</span>
+                  </div>
+                  <span onClick={() => clearRiderState()} className="text-gray-400 cursor-pointer p-1">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </span>
+                </div>
+              ) : (
+                <>
+                <div className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="w-8 h-8 rounded-full bg-success-50 flex items-center justify-center shrink-0">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22C55E" strokeWidth="2.5"><path d="M12 22c-2 0-8-5.06-8-10a8 8 0 1 1 16 0c0 4.94-6 10-8 10z" /><circle cx="12" cy="10" r="2.5" /></svg>
+                  </div>
+                  <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Where are you going?" className="flex-1 text-sm text-text placeholder-gray-400 bg-transparent outline-none" autoFocus />
+                </div>
+                {query.trim() && searchResults.length > 0 && (
+                  <div className="max-h-48 overflow-y-auto border-t border-border">
+                    {searchResults.map(c => (
+                      <button
+                        key={c.id}
+                        onClick={() => { setRiderCollege(c); setQuery(''); }}
+                        className="w-full text-left px-3 py-2.5 hover:bg-primary-50 transition-colors flex items-center gap-2.5"
+                      >
+                        <div className="w-6 h-6 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21V9l9-6 9 6v12" /><path d="M9 21V13h6v8" /></svg>
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-text">{c.short}</p>
+                          <p className="text-xs text-gray-400 truncate">{c.name}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 )}
-              </button>
+                </>
+              )}
             </div>
           </div>
-
-          {showCollegeSearch && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="absolute top-20 left-4 right-4 z-20 bg-white rounded-2xl shadow-md border border-border overflow-hidden"
-            >
-              <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
-                <button onClick={() => { setShowCollegeSearch(false); setQuery(''); }} className="text-gray-400">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                </button>
-                <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Search colleges..." className="flex-1 text-sm text-text placeholder-gray-400 bg-transparent outline-none" autoFocus />
-              </div>
-              {searchResults.length > 0 && (
-                <div className="max-h-48 overflow-y-auto">
-                  {searchResults.map(c => (
-                    <button
-                      key={c.id}
-                      onClick={() => { setRiderCollegeAndSearch(c); setShowCollegeSearch(false); setQuery(''); }}
-                      className="w-full text-left px-3 py-2.5 hover:bg-primary-50 transition-colors flex items-center gap-2.5"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-primary-50 flex items-center justify-center shrink-0">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-text">{c.short}</p>
-                        <p className="text-xs text-gray-400 truncate">{c.name}</p>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
 
           {riderCollege && (
             <motion.div
@@ -239,7 +230,7 @@ export default function RiderRide() {
             >
               <button onClick={handleFindRiders} className="w-full bg-primary text-text font-bold rounded-2xl py-4 flex items-center justify-center gap-2 shadow-lg shadow-primary/30 text-lg">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
-                Find Riders
+                Find Passengers
               </button>
             </motion.div>
           )}
@@ -557,6 +548,39 @@ export default function RiderRide() {
           )}
         </>
       )}
+
+      <AnimatePresence>
+        {showOtpModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="bg-white w-full max-w-sm rounded-2xl overflow-hidden">
+              <div className="p-4 text-center">
+                <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-2">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="6" width="20" height="12" rx="2" /><path d="M6 12h4" /><path d="M14 12h4" /></svg>
+                </div>
+                <h2 className="text-base font-bold text-text">Enter OTP</h2>
+                <p className="text-xs text-gray-500 mt-0.5">Ask the passenger for their 4-digit code</p>
+                <input
+                  value={otpInput}
+                  onChange={e => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                  placeholder="0000"
+                  className="mt-3 w-28 mx-auto text-center text-xl font-bold text-text tracking-widest bg-gray-50 border border-border rounded-xl py-2 outline-none focus:ring-2 focus:ring-primary/30"
+                  autoFocus
+                  maxLength={4}
+                  onKeyDown={e => { if (e.key === 'Enter' && otpInput.length === 4) submitOtp(); }}
+                />
+                <div className="mt-3 space-y-1.5">
+                  <button onClick={submitOtp} disabled={otpInput.length !== 4} className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors disabled:opacity-40">
+                    Verify
+                  </button>
+                  <button onClick={() => setShowOtpModal(false)} className="w-full py-2 text-sm font-medium text-gray-500 hover:text-text transition-colors">
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {showReview && reviewTarget && (

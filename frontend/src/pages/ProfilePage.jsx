@@ -1,12 +1,30 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 
+
 export default function ProfilePage() {
-  const { user, role } = useAuth();
+  const { user, role, token } = useAuth();
   const navigate = useNavigate();
 
   if (!user) return null;
+
+  const [avgRating, setAvgRating] = useState(0);
+  const [totalReviews, setTotalReviews] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id && !user?._id) return;
+    const uid = user.id || user._id;
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/reviews/target/${uid}?role=${role}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then(r => r.json()).then(data => {
+      if (data.success) {
+        setAvgRating(data.avgRating || 0);
+        setTotalReviews(data.totalReviews || 0);
+      }
+    }).catch(() => {});
+  }, [user?.id, user?._id, role]);
 
   const verStatus = role === 'rider' ? user.riderVerificationStatus : user.studentVerificationStatus;
 
@@ -113,7 +131,17 @@ export default function ProfilePage() {
             </div>
           </div>
           <div className="flex-1 min-w-0">
-            <h1 className="text-xl font-bold text-text truncate">{user.name || 'Student'}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-bold text-text truncate">{user.name || 'Student'}</h1>
+              {totalReviews > 0 && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="#c3f832" stroke="#c3f832" strokeWidth="2">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
+                  <span className="text-sm font-semibold text-text">{avgRating.toFixed(1)}</span>
+                </div>
+              )}
+            </div>
             <p className="text-sm text-gray-500 mt-0.5">+91 {user.phone || ''}</p>
             {verBadge() && (
               <span className={`inline-block mt-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${verBadge().color}`}>
@@ -145,6 +173,7 @@ export default function ProfilePage() {
             <p className="text-[11px] text-gray-400 mt-0.5">Money Saved</p>
           </div>
         </motion.div>
+
       </div>
 
       {/* Menu */}

@@ -14,6 +14,34 @@ function calcDistance(lat1, lng1, lat2, lng2) {
 
 const MAX_DISTANCE = 2000;
 
+const rateLimitMap = new Map();
+
+function checkRateLimit(socket, event, maxPerMinute = 10) {
+  const key = `${socket.userId}:${event}`;
+  const now = Date.now();
+  const window = 60000;
+  if (!rateLimitMap.has(key)) {
+    rateLimitMap.set(key, []);
+  }
+  const timestamps = rateLimitMap.get(key).filter(t => now - t < window);
+  if (timestamps.length >= maxPerMinute) {
+    socket.emit('error', { message: 'Too many requests. Please slow down.' });
+    return false;
+  }
+  timestamps.push(now);
+  rateLimitMap.set(key, timestamps);
+  return true;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamps] of rateLimitMap.entries()) {
+    const filtered = timestamps.filter(t => now - t < 60000);
+    if (filtered.length === 0) rateLimitMap.delete(key);
+    else rateLimitMap.set(key, filtered);
+  }
+}, 60000);
+
 function setupSocketHandlers(io) {
   io.use((socket, next) => {
     const token = socket.handshake.auth.token;
@@ -32,6 +60,7 @@ function setupSocketHandlers(io) {
 
     // Passenger requests a ride
     socket.on('requestRide', async (data) => {
+      if (!checkRateLimit(socket, 'requestRide', 5)) return;
       try {
         const { college, pickup, fare } = data;
 
@@ -66,6 +95,7 @@ function setupSocketHandlers(io) {
 
     // Cancel pending request
     socket.on('cancelRequest', async () => {
+      if (!checkRateLimit(socket, 'cancelRequest', 10)) return;
       const cancelled = await RideRequest.findOneAndUpdate(
         { passenger: socket.userId, status: 'pending' },
         { status: 'cancelled' },
@@ -80,6 +110,7 @@ function setupSocketHandlers(io) {
 
     // Rider starts looking for passengers
     socket.on('findRiders', async (data) => {
+      if (!checkRateLimit(socket, 'findRiders', 15)) return;
       try {
         const { collegeId, riderLat, riderLng } = data;
         socket.join(`college:${collegeId}`);
@@ -111,6 +142,7 @@ function setupSocketHandlers(io) {
 
     // Rider accepts a request
     socket.on('acceptRequest', async (requestId) => {
+      if (!checkRateLimit(socket, 'acceptRequest', 10)) return;
       try {
         const request = await RideRequest.findById(requestId)
           .populate('passenger', 'name collegeName profilePicture phone');
@@ -144,9 +176,9 @@ function setupSocketHandlers(io) {
 
         await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: request.price || 30 } });
 
-        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture');
+        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture avgRating');
         if (!driverUser) {
-          driverUser = await Rider.findById(socket.userId).select('name profilePicture');
+          driverUser = await Rider.findById(socket.userId).select('name profilePicture avgRating');
         }
 
         io.to(`user:${request.passenger._id}`).emit('matched', {
@@ -179,28 +211,23 @@ function setupSocketHandlers(io) {
     socket.on('joinRideRoom', async (rideId) => {
       try {
         const ride = await Ride.findById(rideId);
-        if (!ride) {
-          console.log(`[joinRideRoom] Ride ${rideId} not found for user ${socket.userId}`);
-          return;
-        }
+        if (!ride) return;
 
         const isDriver = ride.driver.toString() === socket.userId.toString();
         const isPassenger = ride.passengers.some(p => p.user.toString() === socket.userId.toString());
-        console.log(`[joinRideRoom] User ${socket.userId} ride ${rideId} isDriver=${isDriver} isPassenger=${isPassenger}`);
         if (isDriver || isPassenger) {
           socket.join(`ride:${rideId}`);
-          console.log(`[joinRideRoom] User ${socket.userId} joined room ride:${rideId}`);
           socket.emit('joinedRideRoom', { rideId });
         }
-      } catch (err) {
-        console.error(`[joinRideRoom] Error for user ${socket.userId}:`, err.message);
-      }
+      } catch {}
     });
 
     // Location updates
     socket.on('updateLocation', async (data) => {
       try {
         const { rideId, lat, lng } = data;
+        if (!rideId || typeof lat !== 'number' || typeof lng !== 'number') return;
+        if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return;
         const ride = await Ride.findById(rideId);
         if (!ride) return;
 

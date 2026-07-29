@@ -316,10 +316,11 @@ export function RideStateProvider({ children }) {
 
   // === Rider actions ===
   const startFindRiders = useCallback((collegeId) => {
-    emit('findRiders', { collegeId });
+    let fallback = setTimeout(() => emit('findRiders', { collegeId }), 5000);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => {
+          clearTimeout(fallback);
           const { latitude: lat, longitude: lng } = pos.coords;
           riderPosRef.current = { lat, lng };
           emit('findRiders', { collegeId, riderLat: lat, riderLng: lng });
@@ -396,7 +397,7 @@ export function RideStateProvider({ children }) {
       setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
       riderClearVerifyMsg, riderMarkVerified, riderEndRide,
       setRiderVerifyMsg, clearRiderState, setRiderStep,
-      setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
+      setRiderCollege, setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
       setRiderPickupPos, setRiderRideId,
     }}>
       {children}

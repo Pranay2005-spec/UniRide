@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Toast from '../components/Toast';
 import LocationPicker from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
+import { useRideState } from '../context/RideStateContext';
 import { useSavedRoutes } from '../hooks/useSavedRoutes';
 import colleges from '../data/solapurColleges';
 
@@ -21,6 +22,7 @@ export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { routes, addRoute, removeRoute, loading } = useSavedRoutes(user?.id || user?._id);
+  const { matchedRide, searching } = useRideState();
 
   const [pickup, setPickup] = useState(null);
   const [showMap, setShowMap] = useState(false);
@@ -97,6 +99,11 @@ export default function Home() {
   }
 
   function handleConfirmRide() {
+    if (matchedRide || searching) {
+      showToastMsg('You already have an active ride', 'error');
+      setShowConfirm(false);
+      return;
+    }
     setShowConfirm(false);
     sessionStorage.removeItem('ur_ride');
     navigate('/app/rides', {
@@ -407,7 +414,9 @@ export default function Home() {
                 </button>
                 <div className="border-t border-border/50 px-4 py-2 flex items-center justify-between bg-gray-50/50">
                   <button
-                    onClick={() => { sessionStorage.removeItem('ur_ride'); navigate('/app/rides', {
+                    onClick={() => {
+                      if (matchedRide || searching) { showToastMsg('You already have an active ride', 'error'); return; }
+                      sessionStorage.removeItem('ur_ride'); navigate('/app/rides', {
                       state: { college: route.college, pickup: route.pickup, fare: route.pickup?.position && route.college?.lat && route.college?.lng ? Math.round((() => { const [lat1, lon1] = route.pickup.position; const R = 6371; const dLat = (route.college.lat - lat1) * Math.PI / 180; const dLon = (route.college.lng - lon1) * Math.PI / 180; return R * 2 * Math.atan2(Math.sqrt(Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(route.college.lat * Math.PI / 180) * Math.sin(dLon/2)**2), Math.sqrt(1 - (Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(route.college.lat * Math.PI / 180) * Math.sin(dLon/2)**2))); })() * 4 + 10) : null }
                     }); }}
                     className="text-xs font-medium text-primary-600"
