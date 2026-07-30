@@ -206,7 +206,7 @@ exports.verifyCollege = async (req, res) => {
 
 exports.setupRiderAccount = async (req, res) => {
   try {
-    const { phone, password, docType, docNumber } = req.body;
+    const { phone, password, licenseNumber } = req.body;
     if (!phone) return res.status(400).json({ error: 'Phone number required' });
     if (!password || password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
@@ -217,17 +217,13 @@ exports.setupRiderAccount = async (req, res) => {
       return res.status(400).json({ error: 'Rider account already exists with this phone. Please login.' });
     }
 
-    const riderDoc = {};
-    if (docType) riderDoc.docType = docType;
-    if (docNumber) riderDoc.docNumber = docNumber;
-    if (req.files?.riderDoc) riderDoc.filePath = req.files.riderDoc[0].path;
-
     const hashedPassword = await bcrypt.hash(password, 10);
     const rider = await Rider.create({
       phone,
       password: hashedPassword,
-      riderDocs: Object.keys(riderDoc).length > 0 ? [riderDoc] : [],
-      verificationStatus: riderDoc.filePath ? 'pending' : 'not_submitted',
+      licenseNumber: licenseNumber || '',
+      licensePhoto: req.files?.licensePhoto?.[0]?.path || '',
+      verificationStatus: req.files?.licensePhoto ? 'pending' : 'not_submitted',
     });
 
     const token = jwt.sign({ userId: rider._id, role: 'rider' }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -251,7 +247,7 @@ exports.setupRiderAccount = async (req, res) => {
 exports.applyRider = async (req, res) => {
   try {
     const userId = req.userId;
-    const { password, docType, docNumber } = req.body;
+    const { password, licenseNumber } = req.body;
 
     const currentUser = await User.findById(userId);
     if (!currentUser) return res.status(400).json({ error: 'User not found' });
@@ -269,18 +265,15 @@ exports.applyRider = async (req, res) => {
     if (!password || password.length < 6) {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
-    if (!docNumber) return res.status(400).json({ error: 'Driving license number required' });
-    if (!req.files?.riderDoc) return res.status(400).json({ error: 'Driving license image required' });
+    if (!licenseNumber) return res.status(400).json({ error: 'Driving license number required' });
+    if (!req.files?.licensePhoto) return res.status(400).json({ error: 'Driving license image required' });
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const rider = await Rider.create({
       phone: currentUser.phone,
       password: hashedPassword,
-      riderDocs: [{
-        docType: docType || 'driving_license',
-        docNumber,
-        filePath: req.files.riderDoc[0].path,
-      }],
+      licenseNumber,
+      licensePhoto: req.files.licensePhoto[0].path,
       verificationStatus: 'pending',
     });
 
@@ -300,7 +293,7 @@ exports.getRiderApplicationStatus = async (req, res) => {
     const currentUser = await User.findById(userId);
     if (!currentUser) return res.status(400).json({ error: 'User not found' });
 
-    const rider = await Rider.findOne({ phone: currentUser.phone }).select('verificationStatus riderDocs');
+    const rider = await Rider.findOne({ phone: currentUser.phone }).select('verificationStatus licenseNumber licensePhoto');
 
     if (!rider) {
       return res.json({ success: true, applied: false });
@@ -310,7 +303,8 @@ exports.getRiderApplicationStatus = async (req, res) => {
       success: true,
       applied: true,
       status: rider.verificationStatus,
-      docs: rider.riderDocs,
+      licenseNumber: rider.licenseNumber,
+      licensePhoto: rider.licensePhoto,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });

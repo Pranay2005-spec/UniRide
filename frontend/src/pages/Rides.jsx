@@ -91,7 +91,7 @@ export default function Rides() {
     if (searching) return;
 
     if (navState?.college && navState?.pickup) {
-      startRideRequest(navState.college, navState.pickup, navState.fare);
+      startRideRequest(navState.college, navState.pickup, navState.fare, navState.paymentMethod);
       setInitializing(false);
     } else if (college?.id && pickup) {
       startRideRequest(college, pickup, fare);
@@ -211,7 +211,17 @@ export default function Rides() {
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-xs text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
+                    {rideDetails?.rideCode && (
+                      <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{rideDetails.rideCode}</span>
+                    )}
+                    {rideDetails?.paymentMethod === 'online' ? (
+                      <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">UPI</span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Cash</span>
+                    )}
+                  </div>
                 </div>
                 {!verified ? (
                   <div className="px-4 py-2 rounded-xl bg-yellow-100 text-yellow-700 text-xs font-medium shrink-0">

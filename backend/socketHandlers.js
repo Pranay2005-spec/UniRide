@@ -62,7 +62,7 @@ function setupSocketHandlers(io) {
     socket.on('requestRide', async (data) => {
       if (!checkRateLimit(socket, 'requestRide', 5)) return;
       try {
-        const { college, pickup, fare } = data;
+        const { college, pickup, fare, paymentMethod } = data;
 
         if (!college || !college.id) {
           return socket.emit('error', { message: 'College information is required' });
@@ -81,6 +81,7 @@ function setupSocketHandlers(io) {
           college,
           pickup,
           price: fare || 30,
+          paymentMethod: paymentMethod || 'cash',
         });
 
         const populated = await RideRequest.findById(request._id)
@@ -152,8 +153,10 @@ function setupSocketHandlers(io) {
 
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
         const now = new Date();
+        const rideCode = await Ride.generateUniqueCode();
 
         const ride = await Ride.create({
+          rideCode,
           driver: socket.userId,
           driverModel: 'Rider',
           pickup: request.pickup.address,
@@ -167,6 +170,7 @@ function setupSocketHandlers(io) {
           price: request.price || 30,
           active: true,
           currentStop: 0,
+          paymentMethod: request.paymentMethod || 'cash',
           passengers: [{ user: request.passenger._id, otp }],
         });
 
@@ -184,11 +188,13 @@ function setupSocketHandlers(io) {
         io.to(`user:${request.passenger._id}`).emit('matched', {
           ride: {
             _id: ride._id,
+            rideCode: ride.rideCode,
             driver: driverUser,
             currentLocation: ride.currentLocation,
             price: ride.price,
             pickup: ride.pickup,
             route: ride.route,
+            paymentMethod: ride.paymentMethod,
             otp,
           },
           otp,

@@ -35,6 +35,7 @@ export default function Home() {
   });
   const [showManageSaved, setShowManageSaved] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState('cash');
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
 
   useEffect(() => {
@@ -107,7 +108,7 @@ export default function Home() {
     setShowConfirm(false);
     sessionStorage.removeItem('ur_ride');
     navigate('/app/rides', {
-      state: { college: selectedCollege, pickup, fare: bikePrice }
+      state: { college: selectedCollege, pickup, fare: bikePrice, paymentMethod }
     });
   }
 
@@ -567,6 +568,34 @@ export default function Home() {
                     <div className="flex items-center gap-3">
                       <span className="text-[11px] text-gray-400">{distance < 1 ? `${(distance * 1000).toFixed(0)} m` : `${distance.toFixed(1)} km`}</span>
                       <span className="text-base font-bold text-text">₹{bikePrice}</span>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-50 rounded-xl p-3">
+                    <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-2.5">Payment method</p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setPaymentMethod('cash')}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                          paymentMethod === 'cash' ? 'bg-primary text-text shadow-sm' : 'bg-white text-gray-500 border border-border hover:bg-gray-50'
+                        }`}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2" /><path d="M6 12h.01M18 12h.01" />
+                        </svg>
+                        Cash
+                      </button>
+                      <button
+                        onClick={() => setPaymentMethod('online')}
+                        className={`flex-1 py-2.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all ${
+                          paymentMethod === 'online' ? 'bg-primary text-text shadow-sm' : 'bg-white text-gray-500 border border-border hover:bg-gray-50'
+                        }`}
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="1" y="4" width="22" height="16" rx="2" /><line x1="1" y1="10" x2="23" y2="10" />
+                        </svg>
+                        UPI / Online
+                      </button>
                     </div>
                   </div>
                 </div>

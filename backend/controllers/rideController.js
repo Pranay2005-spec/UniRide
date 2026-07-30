@@ -419,9 +419,11 @@ exports.checkMatch = async (req, res) => {
       matched: true,
       ride: {
         _id: ride._id,
+        rideCode: ride.rideCode,
         driver: ride.driver,
         currentLocation: ride.currentLocation,
         price: ride.price,
+        paymentMethod: ride.paymentMethod,
       },
       otp: otpEntry?.otp || null,
       verified: otpEntry?.verified || false,
@@ -465,8 +467,10 @@ exports.acceptRequest = async (req, res) => {
 
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const now = new Date();
+    const rideCode = await Ride.generateUniqueCode();
 
     const ride = await Ride.create({
+      rideCode,
       driver: req.userId,
       driverModel: req.userRole === 'rider' ? 'Rider' : 'User',
       pickup: request.pickup.address,
@@ -480,6 +484,7 @@ exports.acceptRequest = async (req, res) => {
       price: request.price || 30,
       active: true,
       currentStop: 0,
+      paymentMethod: request.paymentMethod || 'cash',
       passengers: [{ user: request.passenger._id, otp }],
     });
 
@@ -489,7 +494,36 @@ exports.acceptRequest = async (req, res) => {
 
     await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: 30 } });
 
-    res.json({ success: true, ride: { ...ride.toObject(), driver: req.userId }, otp });
+    res.json({ success: true, ride: { ...ride.toObject(), driver: req.userId, rideCode: ride.rideCode }, otp });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getMyRideHistory = async (req, res) => {
+  try {
+    const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    let rides;
+
+    if (req.userRole === 'rider') {
+      rides = await Ride.find({
+        driver: req.userId,
+        status: 'completed',
+        updatedAt: { $gte: oneWeekAgo },
+      }).populate('driver', 'name avgRating')
+        .populate('passengers.user', 'name avgRating')
+        .sort({ updatedAt: -1 });
+    } else {
+      rides = await Ride.find({
+        'passengers.user': req.userId,
+        status: 'completed',
+        updatedAt: { $gte: oneWeekAgo },
+      }).populate('driver', 'name avgRating')
+        .populate('passengers.user', 'name avgRating')
+        .sort({ updatedAt: -1 });
+    }
+
+    res.json({ success: true, rides });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

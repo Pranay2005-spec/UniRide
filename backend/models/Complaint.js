@@ -4,6 +4,7 @@ const complaintSchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   targetUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   rideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Ride' },
+  rideCode: { type: String },
   subject: { type: String, required: true },
   description: { type: String, required: true },
   status: { type: String, enum: ['pending', 'resolved', 'dismissed'], default: 'pending' },

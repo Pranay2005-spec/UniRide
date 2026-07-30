@@ -36,6 +36,7 @@ export function RideStateProvider({ children }) {
   const [college, setCollege] = useState(() => loadPersisted(STORAGE_KEY).college || null);
   const [pickup, setPickup] = useState(() => loadPersisted(STORAGE_KEY).pickup || null);
   const [fare, setFare] = useState(() => loadPersisted(STORAGE_KEY).fare || null);
+  const [paymentMethod, setPaymentMethod] = useState(() => loadPersisted(STORAGE_KEY).paymentMethod || 'cash');
   const [passengerPos, setPassengerPos] = useState(null);
   const [lastError, setLastError] = useState(null);
   const [showReview, setShowReview] = useState(false);
@@ -75,10 +76,10 @@ export function RideStateProvider({ children }) {
   useEffect(() => {
     if (matchedRide || college) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
-        matchedRide, otp, college, pickup, fare, verified, rideDetails,
+        matchedRide, otp, college, pickup, fare, verified, rideDetails, paymentMethod,
       }));
     }
-  }, [matchedRide, otp, college, pickup, fare, verified, rideDetails]);
+  }, [matchedRide, otp, college, pickup, fare, verified, rideDetails, paymentMethod]);
 
   // === Persist rider state ===
   useEffect(() => {
@@ -101,6 +102,7 @@ export function RideStateProvider({ children }) {
     setCollege(null);
     setPickup(null);
     setFare(null);
+    setPaymentMethod('cash');
     setLastError(null);
     sessionStorage.removeItem(STORAGE_KEY);
   }
@@ -356,13 +358,14 @@ export function RideStateProvider({ children }) {
   }, [matchedRide, riderRideId]);
 
   // === Passenger actions ===
-  const startRideRequest = useCallback((c, p, f) => {
+  const startRideRequest = useCallback((c, p, f, pm) => {
     setCollege(c);
     setPickup(p);
     setFare(f);
+    setPaymentMethod(pm || 'cash');
     setSearching(true);
     setLastError(null);
-    emit('requestRide', { college: c, pickup: p, fare: f });
+    emit('requestRide', { college: c, pickup: p, fare: f, paymentMethod: pm || 'cash' });
   }, [emit]);
 
   const cancelRideRequest = useCallback(() => {
@@ -374,9 +377,9 @@ export function RideStateProvider({ children }) {
     if (college && pickup) {
       setLastError(null);
       setSearching(true);
-      emit('requestRide', { college, pickup, fare });
+      emit('requestRide', { college, pickup, fare, paymentMethod });
     }
-  }, [college, pickup, fare, emit]);
+  }, [college, pickup, fare, paymentMethod, emit]);
 
   const dismissReview = useCallback(() => {
     setShowReview(false);

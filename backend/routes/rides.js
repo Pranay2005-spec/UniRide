@@ -13,6 +13,7 @@ router.patch('/:id/stop', auth, rideController.updateStop);
 router.get('/:id/passengers', auth, rideController.getPassengers);
 router.get('/offered', auth, rideController.getMyOfferedRides);
 router.get('/joined', auth, rideController.getMyJoinedRides);
+router.get('/history', auth, rideController.getMyRideHistory);
 
 // Ride request flow (passenger requests, rider accepts)
 router.post('/request', auth, rideController.requestRide);

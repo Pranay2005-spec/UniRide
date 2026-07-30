@@ -1,16 +1,34 @@
 const Complaint = require('../models/Complaint');
+const Ride = require('../models/Ride');
 
 exports.createComplaint = async (req, res) => {
   try {
-    const { targetUserId, rideId, subject, description } = req.body;
+    const { targetUserId, rideId, rideCode, subject, description } = req.body;
     if (!subject || !description) {
       return res.status(400).json({ error: 'Subject and description required' });
     }
 
+    let resolvedRideId = rideId;
+    let resolvedTargetUserId = targetUserId;
+
+    if (rideCode && !resolvedRideId) {
+      const ride = await Ride.findOne({ rideCode });
+      if (ride) {
+        resolvedRideId = ride._id;
+        const isDriver = ride.driver.toString() === req.userId.toString();
+        if (isDriver && ride.passengers.length > 0) {
+          resolvedTargetUserId = ride.passengers[0].user;
+        } else if (!isDriver) {
+          resolvedTargetUserId = ride.driver;
+        }
+      }
+    }
+
     const complaint = await Complaint.create({
       userId: req.userId,
-      targetUserId,
-      rideId,
+      targetUserId: resolvedTargetUserId,
+      rideId: resolvedRideId,
+      rideCode,
       subject,
       description,
     });

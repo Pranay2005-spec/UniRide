@@ -172,14 +172,12 @@ export default function AdminDashboard() {
             riders.map(r => (
               <div key={r._id} className="bg-white rounded-xl border border-border p-4 mb-3">
                 <p className="font-semibold text-sm">+91 {r.phone}</p>
-                {r.riderDocs?.map((doc, i) => (
-                  <div key={i} className="mt-1">
-                    <p className="text-xs text-gray-500 capitalize">{doc.docType}: {doc.docNumber}</p>
-                    {doc.filePath && (
-                      <img src={`${API.replace('/api', '')}/${doc.filePath}`} alt="Doc" className="mt-1 h-32 rounded-lg object-cover border" />
-                    )}
-                  </div>
-                ))}
+                <div className="mt-1">
+                  <p className="text-xs text-gray-500">License: {r.licenseNumber}</p>
+                  {r.licensePhoto && (
+                    <img src={`${API.replace('/api', '')}/${r.licensePhoto}`} alt="License" className="mt-1 h-32 rounded-lg object-cover border" />
+                  )}
+                </div>
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => handleVerifyRider(r._id, 'approved')} className="flex-1 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold">Approve</button>
                   <button onClick={() => handleVerifyRider(r._id, 'rejected')} className="flex-1 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold">Reject</button>

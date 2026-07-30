@@ -11,6 +11,7 @@ export default function Complaints() {
 
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
+  const [rideCode, setRideCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -45,13 +46,14 @@ export default function Complaints() {
       const res = await fetch(`${API}/complaints`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-        body: JSON.stringify({ subject, description }),
+        body: JSON.stringify({ subject, description, rideCode: rideCode || undefined }),
       });
       const data = await res.json();
       if (data.success) {
         setSuccess('Complaint submitted');
         setSubject('');
         setDescription('');
+        setRideCode('');
         fetchMyComplaints();
         setTimeout(() => setSuccess(''), 3000);
       } else {
@@ -78,6 +80,10 @@ export default function Complaints() {
         {view === 'new' ? (
           <div className="bg-white rounded-2xl border border-border p-5">
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-medium text-gray-500 mb-1 block">Ride Code <span className="text-gray-300 font-normal">(optional — found on ride card)</span></label>
+                <input type="text" value={rideCode} onChange={e => setRideCode(e.target.value.toUpperCase())} placeholder="e.g. RIDE-4A7K2" className="input-field !py-3 !text-sm font-mono tracking-wide" />
+              </div>
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1 block">Subject</label>
                 <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Brief title" className="input-field !py-3 !text-sm" />

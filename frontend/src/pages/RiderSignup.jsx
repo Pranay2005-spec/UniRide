@@ -11,9 +11,8 @@ export default function RiderSignup() {
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
-  const [docType, setDocType] = useState('aadhaar');
-  const [docNumber, setDocNumber] = useState('');
-  const [docFile, setDocFile] = useState(null);
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [licenseFile, setLicenseFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -54,8 +53,8 @@ export default function RiderSignup() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!password || password.length < 6) { setError('Password must be at least 6 characters'); return; }
-    if (!docNumber) { setError('Enter document number'); return; }
-    if (!docFile) { setError('Upload document image'); return; }
+    if (!licenseNumber) { setError('Enter your driving license number'); return; }
+    if (!licenseFile) { setError('Upload your driving license image'); return; }
 
     setLoading(true);
     setError('');
@@ -64,9 +63,8 @@ export default function RiderSignup() {
       const formData = new FormData();
       formData.append('phone', phone);
       formData.append('password', password);
-      formData.append('docType', docType);
-      formData.append('docNumber', docNumber);
-      formData.append('riderDoc', docFile);
+      formData.append('licenseNumber', licenseNumber);
+      formData.append('licensePhoto', licenseFile);
 
       const res = await fetch(`${API}/auth/setup-rider`, {
         method: 'POST',
@@ -146,7 +144,7 @@ export default function RiderSignup() {
                 <motion.div key="details" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
                   <div className="text-center mb-6">
                     <h2 className="text-lg font-bold text-text">Set up your account</h2>
-                    <p className="text-xs text-gray-500 mt-1">Choose a password and upload your ID</p>
+                    <p className="text-xs text-gray-500 mt-1">Choose a password and upload your driving license</p>
                   </div>
                   <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -155,23 +153,13 @@ export default function RiderSignup() {
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1 block">ID Type</label>
-                      <select value={docType} onChange={e => setDocType(e.target.value)} className="input-field !py-3 !text-sm">
-                        <option value="aadhaar">Aadhaar Card</option>
-                        <option value="pan">PAN Card</option>
-                        <option value="driving_license">Driving License</option>
-                        <option value="other">Other</option>
-                      </select>
+                      <label className="text-xs font-medium text-gray-500 mb-1 block">Driving License Number</label>
+                      <input type="text" value={licenseNumber} onChange={e => setLicenseNumber(e.target.value)} placeholder="Enter license number" className="input-field !py-3 !text-sm" />
                     </div>
 
                     <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1 block">ID Number</label>
-                      <input type="text" value={docNumber} onChange={e => setDocNumber(e.target.value)} placeholder="Enter ID number" className="input-field !py-3 !text-sm" />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-medium text-gray-500 mb-1 block">Upload ID Image</label>
-                      <input type="file" accept="image/*" onChange={e => setDocFile(e.target.files[0])} className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-100 file:text-primary hover:file:bg-primary-200" />
+                      <label className="text-xs font-medium text-gray-500 mb-1 block">Upload Driving License Image</label>
+                      <input type="file" accept="image/*" onChange={e => setLicenseFile(e.target.files[0])} className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-100 file:text-primary hover:file:bg-primary-200" />
                     </div>
 
                     {error && <p className="text-red-500 text-xs text-center">{error}</p>}

@@ -270,7 +270,17 @@ export default function RiderRide() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-semibold text-text">{acceptedPassenger?.name || 'Student'}</p>
-                      <p className="text-xs text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-xs text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
+                        {riderRideDetails?.rideCode && (
+                          <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{riderRideDetails.rideCode}</span>
+                        )}
+                        {riderRideDetails?.paymentMethod === 'online' ? (
+                          <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">UPI</span>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Cash</span>
+                        )}
+                      </div>
                     </div>
                     {!isVerified ? (
                       <button onClick={(e) => { e.stopPropagation(); handleVerifyOtp(); }} className="px-4 py-2 rounded-xl bg-primary text-text font-semibold text-xs hover:bg-primary-400 transition-colors shrink-0">
@@ -512,7 +522,17 @@ export default function RiderRide() {
                       )}
                     </div>
                     <p className="text-base font-bold text-text">{acceptedPassenger.name || 'Student'}</p>
-                    <p className="text-sm text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
+                    <div className="flex items-center justify-center gap-2">
+                      <p className="text-sm text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
+                      {riderRideDetails?.rideCode && (
+                        <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{riderRideDetails.rideCode}</span>
+                      )}
+                      {riderRideDetails?.paymentMethod === 'online' ? (
+                        <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">UPI</span>
+                      ) : (
+                        <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Cash</span>
+                      )}
+                    </div>
 
                     {passengerLoc?.lat && riderPos && (
                       <div className="text-sm mt-1">

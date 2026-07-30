@@ -13,9 +13,8 @@ export default function SwitchRole() {
   const [status, setStatus] = useState('checking');
   const [riderStatus, setRiderStatus] = useState(null);
   const [password, setPassword] = useState('');
-  const [docType, setDocType] = useState('driving_license');
-  const [docNumber, setDocNumber] = useState('');
-  const [docFile, setDocFile] = useState(null);
+  const [licenseNumber, setLicenseNumber] = useState('');
+  const [licenseFile, setLicenseFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
@@ -49,8 +48,8 @@ export default function SwitchRole() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
-    if (!docNumber) { setError('Enter your driving license number'); return; }
-    if (!docFile) { setError('Upload your driving license image'); return; }
+    if (!licenseNumber) { setError('Enter your driving license number'); return; }
+    if (!licenseFile) { setError('Upload your driving license image'); return; }
 
     setLoading(true);
     setError('');
@@ -58,9 +57,8 @@ export default function SwitchRole() {
     try {
       const formData = new FormData();
       formData.append('password', password);
-      formData.append('docType', docType);
-      formData.append('docNumber', docNumber);
-      formData.append('riderDoc', docFile);
+      formData.append('licenseNumber', licenseNumber);
+      formData.append('licensePhoto', licenseFile);
 
       const res = await fetch(`${API}/auth/apply-rider`, {
         method: 'POST',
@@ -194,30 +192,20 @@ export default function SwitchRole() {
               </div>
 
               <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Document Type</label>
-                <select value={docType} onChange={e => setDocType(e.target.value)} className="input-field !py-3 !text-sm">
-                  <option value="driving_license">Driving License</option>
-                  <option value="aadhaar">Aadhaar Card</option>
-                  <option value="pan">PAN Card</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Document Number</label>
-                <input type="text" value={docNumber} onChange={e => setDocNumber(e.target.value)} placeholder="Enter document number" className="input-field !py-3 !text-sm" />
+                <label className="text-xs font-medium text-gray-500 mb-1.5 block">Driving License Number</label>
+                <input type="text" value={licenseNumber} onChange={e => setLicenseNumber(e.target.value)} placeholder="Enter license number" className="input-field !py-3 !text-sm" />
               </div>
 
               <div>
                 <label className="text-xs font-medium text-gray-500 mb-1.5 block">Upload Driving License Image</label>
-                <input type="file" accept="image/*" onChange={e => setDocFile(e.target.files[0])} className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-100 file:text-primary hover:file:bg-primary-200" />
+                <input type="file" accept="image/*" onChange={e => setLicenseFile(e.target.files[0])} className="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-100 file:text-primary hover:file:bg-primary-200" />
               </div>
 
               {error && (
                 <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-500 text-xs text-center">{error}</motion.p>
               )}
 
-              <button type="submit" disabled={loading || password.length < 6 || !docNumber || !docFile} className="btn-primary !py-3.5 !text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/25 w-full">
+              <button type="submit" disabled={loading || password.length < 6 || !licenseNumber || !licenseFile} className="btn-primary !py-3.5 !text-sm flex items-center justify-center gap-2 shadow-lg shadow-primary/25 w-full">
                 {loading ? (
                   <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
                 ) : 'Submit for Verification'}
