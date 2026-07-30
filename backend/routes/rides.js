@@ -17,6 +17,7 @@ router.get('/joined', auth, rideController.getMyJoinedRides);
 // Ride request flow (passenger requests, rider accepts)
 router.post('/request', auth, rideController.requestRide);
 router.get('/my-match', auth, rideController.checkMatch);
+router.get('/my-active-ride', auth, rideController.checkMyActiveRide);
 router.get('/waiting-passengers', auth, rideController.getWaitingPassengers);
 router.post('/accept-request/:id', auth, rideController.acceptRequest);
 router.delete('/request', auth, rideController.cancelRequest);

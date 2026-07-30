@@ -159,9 +159,10 @@ export default function RiderRide() {
   }
 
   const destPos = riderCollege ? [riderCollege.lat, riderCollege.lng] : null;
+  const verifyMatchId = String(acceptedPassenger?._id);
   const isVerified = riderRideDetails?.passengers?.find(p => {
-    const pid = p.user?._id || p.user;
-    return pid === acceptedPassenger?._id;
+    const pid = String(p.user?._id || p.user);
+    return pid === verifyMatchId;
   })?.verified;
   const passengerLoc = riderRideDetails?.passengers?.[0]?.location;
 
@@ -276,10 +277,10 @@ export default function RiderRide() {
                         Verify OTP
                       </button>
                     ) : (
-                      <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shrink-0">
+                      <button className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shrink-0 cursor-default">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
                         Verified
-                      </div>
+                      </button>
                     )}
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowChat(true); }}

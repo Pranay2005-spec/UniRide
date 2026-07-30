@@ -496,6 +496,29 @@ exports.acceptRequest = async (req, res) => {
 };
 
 // Passenger cancels their ride request
+// Rider checks their active ride on page refresh
+exports.checkMyActiveRide = async (req, res) => {
+  try {
+    const ride = await Ride.findOne({
+      driver: req.userId,
+      active: true,
+      status: 'active',
+    }).populate('passengers.user', 'name collegeName profilePicture phone');
+
+    if (!ride) {
+      return res.json({ success: true, active: false });
+    }
+
+    res.json({
+      success: true,
+      active: true,
+      ride,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.cancelRequest = async (req, res) => {
   try {
     await RideRequest.updateMany(

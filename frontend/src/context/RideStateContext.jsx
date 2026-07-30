@@ -69,6 +69,7 @@ export function RideStateProvider({ children }) {
   riderRideIdRef.current = riderRideId;
   const riderPosRef = useRef(null);
   const locWatcherRef = useRef(null);
+  const wasConnectedRef = useRef(false);
 
   // === Persist passenger state ===
   useEffect(() => {
@@ -132,6 +133,27 @@ export function RideStateProvider({ children }) {
         } else if (data.otp) {
           setOtp(data.otp);
           setVerified(data.verified);
+          if (data.ride) setRideDetails(data.ride);
+          emit('joinRideRoom', matchedRide);
+        }
+      } catch {}
+    })();
+  }, [connected]);
+
+  // On mount, verify persisted rider ride is still valid
+  useEffect(() => {
+    if (!connected || !riderRideId || !riderOtp) return;
+    (async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/my-active-ride`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (!data.active) {
+          clearRiderState();
+        } else if (data.ride) {
+          setRiderRideDetails(data.ride);
+          emit('joinRideRoom', riderRideId);
         }
       } catch {}
     })();
@@ -217,7 +239,12 @@ export function RideStateProvider({ children }) {
       const rr = riderRideIdRef.current;
       if ((mr && data.rideId === mr) || (rr && data.rideId === rr)) {
         if (data.showReview) {
-          const target = data.driver || data.passenger;
+          let target;
+          if (mr && data.rideId === mr) {
+            target = data.driver;
+          } else {
+            target = data.passengers?.[0];
+          }
           if (target) {
             setReviewTarget({ _id: target._id, name: target.name });
             setReviewRideId(data.rideId);
@@ -294,9 +321,11 @@ export function RideStateProvider({ children }) {
     return () => navigator.geolocation.clearWatch(watcher);
   }, [riderRideId, riderOtp]);
 
-  // Reset on connection loss
+  // Reset on connection loss — but only after initial connection established (not on mount)
   useEffect(() => {
-    if (!connected) {
+    if (connected) {
+      wasConnectedRef.current = true;
+    } else if (wasConnectedRef.current) {
       if (matchedRideRef.current) {
         clearState();
         setPassengerPos(null);
@@ -417,11 +446,12 @@ export function RideStateProvider({ children }) {
   const riderMarkVerified = useCallback(() => {
     setRiderRideDetails(prev => {
       if (!prev) return prev;
+      const matchId = String(acceptedPassenger?._id);
       return {
         ...prev,
         passengers: prev.passengers?.map(p => {
-          const pid = p.user?._id || p.user;
-          if (pid === acceptedPassenger?._id) return { ...p, verified: true };
+          const pid = String(p.user?._id || p.user);
+          if (pid === matchId) return { ...p, verified: true };
           return p;
         }),
       };

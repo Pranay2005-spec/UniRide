@@ -284,7 +284,7 @@ function setupSocketHandlers(io) {
       } catch {}
     });
 
-    // On disconnect
+    // On disconnect — cancel pending requests but NOT active rides (survives page refresh)
     socket.on('disconnect', async () => {
       try {
         const pending = await RideRequest.findOneAndUpdate(
@@ -295,20 +295,6 @@ function setupSocketHandlers(io) {
         if (pending) {
           io.to(`college:${pending.college.id}`).emit('passengerCancelled', {
             requestId: pending._id,
-          });
-        }
-
-        const activeRide = await Ride.findOne({
-          driver: socket.userId,
-          active: true,
-          status: 'active',
-        });
-        if (activeRide) {
-          activeRide.active = false;
-          activeRide.status = 'cancelled';
-          await activeRide.save();
-          io.to(`ride:${activeRide._id}`).emit('rideDeactivated', {
-            rideId: activeRide._id,
           });
         }
       } catch {}
