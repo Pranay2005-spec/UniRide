@@ -6,6 +6,8 @@ import { useSocket } from '../context/SocketContext';
 import { useRideState } from '../context/RideStateContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
+import { buildUpiUrl } from '../lib/upi';
+import { QRCodeSVG } from 'qrcode.react';
 import colleges from '../data/solapurColleges';
 import ReviewModal from '../components/ReviewModal';
 import ChatOverlay from '../components/ChatOverlay';
@@ -47,15 +49,17 @@ function calcDistance(lat1, lng1, lat2, lng2) {
 }
 
 export default function RiderRide() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { connected } = useSocket();
   const {
     riderStep, riderCollege, waitingPassengers, acceptedPassenger,
     riderRideId, riderOtp, riderRideDetails, riderPickupPos,
     riderVerifyMsg, riderPos,
     showReview, reviewTarget, reviewRideId,
+    paymentPending,
     setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
     riderClearVerifyMsg, riderMarkVerified, riderEndRide,
+    riderConfirmPayment,
     setRiderVerifyMsg, setRiderCollege, clearRiderState, setRiderStep,
     setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
     setRiderPickupPos, setRiderRideId, dismissReview,
@@ -150,16 +154,25 @@ export default function RiderRide() {
 
   async function handleEndRide() {
     if (!riderRideId) return handleDone();
+    const isOnline = riderRideDetails?.paymentMethod === 'online';
     try {
       await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideId}/complete`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       });
     } catch {}
-    riderEndRide();
+    if (!isOnline) {
+      riderEndRide();
+    }
   }
 
   const destPos = riderCollege ? [riderCollege.lat, riderCollege.lng] : null;
   const verifyMatchId = String(acceptedPassenger?._id);
+  const upiUrl = buildUpiUrl({
+    upiId: user?.upiId,
+    name: user?.name,
+    amount: riderRideDetails?.price,
+    txnNote: riderRideDetails?.rideCode,
+  });
   const isVerified = riderRideDetails?.passengers?.find(p => {
     const pid = String(p.user?._id || p.user);
     return pid === verifyMatchId;
@@ -269,32 +282,49 @@ export default function RiderRide() {
                       {acceptedPassenger?.name?.[0] || '?'}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-text">{acceptedPassenger?.name || 'Student'}</p>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-text truncate">{acceptedPassenger?.name || 'Student'}</p>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {!isVerified ? (
+                            <button onClick={(e) => { e.stopPropagation(); handleVerifyOtp(); }} className="px-3 py-1.5 rounded-xl bg-primary text-text font-semibold text-xs hover:bg-primary-400 transition-colors whitespace-nowrap">
+                              Verify OTP
+                            </button>
+                          ) : (
+                            <button className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap cursor-default">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                              Verified
+                            </button>
+                          )}
+                          <motion.svg
+                            animate={{ rotate: sheetExpanded ? 180 : 0 }}
+                            width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                            className="text-gray-400"
+                          >
+                            <polyline points="6 9 12 15 18 9" />
+                          </motion.svg>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 flex-wrap mt-1.5">
                         <p className="text-xs text-green-700 font-medium">₹{riderRideDetails?.price || 30} fare</p>
-                        {riderRideDetails?.rideCode && (
-                          <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{riderRideDetails.rideCode}</span>
-                        )}
                         {riderRideDetails?.paymentMethod === 'online' ? (
                           <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">UPI</span>
                         ) : (
                           <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Cash</span>
                         )}
+                        {paymentPending && (
+                          <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Payment pending</span>
+                        )}
+                        {riderRideDetails?.paymentStatus === 'paid' && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                            Paid
+                          </span>
+                        )}
                       </div>
                     </div>
-                    {!isVerified ? (
-                      <button onClick={(e) => { e.stopPropagation(); handleVerifyOtp(); }} className="px-4 py-2 rounded-xl bg-primary text-text font-semibold text-xs hover:bg-primary-400 transition-colors shrink-0">
-                        Verify OTP
-                      </button>
-                    ) : (
-                      <button className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shrink-0 cursor-default">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                        Verified
-                      </button>
-                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); setShowChat(true); }}
-                      className="relative w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors"
+                      className="relative w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors self-center"
                     >
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
                       {unreadChatCount > 0 && (
@@ -303,13 +333,6 @@ export default function RiderRide() {
                         </span>
                       )}
                     </button>
-                    <motion.svg
-                      animate={{ rotate: sheetExpanded ? 180 : 0 }}
-                      width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                      className="text-gray-400 shrink-0"
-                    >
-                      <polyline points="6 9 12 15 18 9" />
-                    </motion.svg>
                   </button>
                   <motion.div
                     animate={{ height: sheetExpanded ? 'auto' : 0, opacity: sheetExpanded ? 1 : 0 }}
@@ -317,6 +340,22 @@ export default function RiderRide() {
                     className="overflow-hidden"
                   >
                     <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
+                      {riderRideDetails?.rideCode && (
+                        <p className="text-xs text-gray-400 text-center font-mono font-semibold">Ride code: {riderRideDetails.rideCode}</p>
+                      )}
+                      {isVerified && riderRideDetails?.paymentMethod === 'online' && riderRideDetails?.paymentStatus !== 'paid' && (
+                        <div className="bg-sky-50 rounded-xl p-4 border border-sky-200">
+                          <p className="text-sm font-semibold text-sky-800 text-center">Ask the passenger to scan & pay</p>
+                          <p className="text-xs text-sky-600 text-center mt-0.5 mb-3">₹{riderRideDetails?.price || 30} via any UPI app</p>
+                          {upiUrl ? (
+                            <div className="bg-white p-3 rounded-xl border border-border flex justify-center">
+                              <QRCodeSVG value={upiUrl} size={150} level="M" />
+                            </div>
+                          ) : (
+                            <p className="text-xs text-amber-600 text-center">Set your UPI ID in Profile → UPI ID to accept online payments.</p>
+                          )}
+                        </div>
+                      )}
                       {passengerLoc?.lat && riderPos && (
                         <div className="text-sm">
                           {(() => {
@@ -337,9 +376,26 @@ export default function RiderRide() {
                           {riderVerifyMsg}
                         </p>
                       )}
-                      <button onClick={handleEndRide} className="w-full py-2.5 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
-                        End Ride
-                      </button>
+                      {paymentPending && (
+                        <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+                          <p className="text-sm font-semibold text-amber-800">Payment received?</p>
+                          <p className="text-xs text-amber-600 mt-1 mb-3">Ask the passenger to pay ₹{riderRideDetails?.price || 30} before confirming.</p>
+                          <button onClick={riderConfirmPayment} className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors">
+                            Confirm Payment — Mark as Paid
+                          </button>
+                        </div>
+                      )}
+                      {riderRideDetails?.paymentStatus === 'paid' && (
+                        <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-semibold">
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                          Payment received
+                        </div>
+                      )}
+                      {!paymentPending && (
+                        <button onClick={handleEndRide} className="w-full py-2.5 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                          End Ride
+                        </button>
+                      )}
                     </div>
                   </motion.div>
 </div>
@@ -572,9 +628,26 @@ export default function RiderRide() {
                       </p>
                     )}
 
-                    <button onClick={handleEndRide} className="mt-4 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
-                      End Ride
-                    </button>
+                    {paymentPending && (
+                      <div className="bg-amber-50 rounded-xl p-4 border border-amber-200 mt-3">
+                        <p className="text-sm font-semibold text-amber-800">Payment received?</p>
+                        <p className="text-xs text-amber-600 mt-1 mb-3">Ask the passenger to pay ₹{riderRideDetails?.price || 30} before confirming.</p>
+                        <button onClick={riderConfirmPayment} className="w-full py-2.5 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors">
+                          Confirm Payment — Mark as Paid
+                        </button>
+                      </div>
+                    )}
+                    {riderRideDetails?.paymentStatus === 'paid' && (
+                      <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-semibold mt-3">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                        Payment received
+                      </div>
+                    )}
+                    {!paymentPending && (
+                      <button onClick={handleEndRide} className="mt-4 py-2 px-6 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                        End Ride
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

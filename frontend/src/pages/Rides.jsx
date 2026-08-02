@@ -6,6 +6,7 @@ import { useSocket } from '../context/SocketContext';
 import { useRideState } from '../context/RideStateContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
+import { buildUpiUrl } from '../lib/upi';
 import ReviewModal from '../components/ReviewModal';
 import ChatOverlay from '../components/ChatOverlay';
 
@@ -33,6 +34,41 @@ function getTileUrl(lat, lng, zoom = 14) {
   return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
 }
 
+function PaymentCard({ ride }) {
+  const upiUrl = buildUpiUrl({
+    upiId: ride?.driver?.upiId,
+    name: ride?.driver?.name,
+    amount: ride?.price,
+    txnNote: ride?.rideCode,
+  });
+
+  if (!upiUrl) {
+    return (
+      <div className="bg-amber-50 rounded-xl p-4 border border-amber-200">
+        <p className="text-sm font-semibold text-amber-800">UPI not available</p>
+        <p className="text-xs text-amber-600 mt-1">The rider hasn't set up a UPI ID yet. Please pay by cash when you meet.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-border overflow-hidden">
+      <div className="p-4">
+        <p className="text-sm font-semibold text-text text-center mb-1">Pay ₹{ride?.price || 30} via UPI</p>
+        <p className="text-xs text-gray-400 text-center mb-3">Scan the QR shown on the rider's phone, or pay from your UPI app.</p>
+        <a
+          href={upiUrl}
+          className="w-full py-3 rounded-xl bg-primary text-text font-semibold text-sm flex items-center justify-center gap-2 hover:bg-primary-400 transition-colors"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="5" width="20" height="14" rx="2" /><line x1="2" y1="10" x2="22" y2="10" /></svg>
+          Pay Now
+        </a>
+        <p className="text-xs text-gray-500 text-center mt-2">Your rider will confirm the payment once they receive it.</p>
+      </div>
+    </div>
+  );
+}
+
 function FlyToMarker({ position }) {
   const map = useMap();
   useEffect(() => {
@@ -50,6 +86,7 @@ export default function Rides() {
     searching, matchedRide, otp, rideDetails, verified,
     college, pickup, fare, passengerPos, lastError,
     showReview, reviewTarget, reviewRideId,
+    paymentPending,
     startRideRequest, cancelRideRequest, retryRideRequest,
     dismissReview,
     chatMessages, unreadChatCount,
@@ -200,42 +237,59 @@ export default function Rides() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-sm font-semibold text-text">{driver?.name || 'Rider'}</p>
-                    {driver?.avgRating > 0 && (
-                      <div className="flex items-center gap-0.5">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="#c3f832" stroke="#c3f832" strokeWidth="2">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                        </svg>
-                        <span className="text-xs font-semibold text-text">{driver.avgRating.toFixed(1)}</span>
-                      </div>
-                    )}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <p className="text-sm font-semibold text-text truncate">{driver?.name || 'Rider'}</p>
+                      {driver?.avgRating > 0 && (
+                        <div className="flex items-center gap-0.5 shrink-0">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="#c3f832" stroke="#c3f832" strokeWidth="2">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                          </svg>
+                          <span className="text-xs font-semibold text-text">{driver.avgRating.toFixed(1)}</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {!verified ? (
+                        <div className="px-3 py-1.5 rounded-xl bg-yellow-100 text-yellow-700 text-xs font-medium whitespace-nowrap">
+                          Show OTP
+                        </div>
+                      ) : (
+                        <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                          Verified
+                        </div>
+                      )}
+                      <motion.svg
+                        animate={{ rotate: sheetExpanded ? 180 : 0 }}
+                        width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                        className="text-gray-400"
+                      >
+                        <polyline points="6 9 12 15 18 9" />
+                      </motion.svg>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2 mt-0.5">
+                  <div className="flex items-center gap-2 flex-wrap mt-1.5">
                     <p className="text-xs text-green-700 font-medium">₹{rideDetails?.price || 30} fare</p>
-                    {rideDetails?.rideCode && (
-                      <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{rideDetails.rideCode}</span>
-                    )}
                     {rideDetails?.paymentMethod === 'online' ? (
                       <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-1.5 py-0.5 rounded">UPI</span>
                     ) : (
                       <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Cash</span>
                     )}
+                    {paymentPending && (
+                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">Payment pending</span>
+                    )}
+                    {rideDetails?.paymentStatus === 'paid' && (
+                      <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-green-700 bg-green-100 px-1.5 py-0.5 rounded">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                        Paid
+                      </span>
+                    )}
                   </div>
                 </div>
-                {!verified ? (
-                  <div className="px-4 py-2 rounded-xl bg-yellow-100 text-yellow-700 text-xs font-medium shrink-0">
-                    Show OTP
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-1 bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-medium shrink-0">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
-                    Verified
-                  </div>
-                )}
                 <button
                   onClick={(e) => { e.stopPropagation(); setShowChat(true); }}
-                  className="relative w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors"
+                  className="relative w-9 h-9 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 hover:bg-gray-200 transition-colors self-center"
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg>
                   {unreadChatCount > 0 && (
@@ -244,13 +298,6 @@ export default function Rides() {
                     </span>
                   )}
                 </button>
-                <motion.svg
-                  animate={{ rotate: sheetExpanded ? 180 : 0 }}
-                  width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
-                  className="text-gray-400 shrink-0"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </motion.svg>
               </button>
               <motion.div
                 animate={{ height: sheetExpanded ? 'auto' : 0, opacity: sheetExpanded ? 1 : 0 }}
@@ -263,12 +310,39 @@ export default function Rides() {
                   )}
                   {!verified ? (
                     <>
-                      <p className="text-3xl font-bold text-primary text-center tracking-widest">{otp || rideDetails?.otp || '----'}</p>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-3xl font-bold text-primary text-center tracking-widest">{otp || rideDetails?.otp || '----'}</p>
+                        {rideDetails?.rideCode && (
+                          <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{rideDetails.rideCode}</span>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 text-center">Show this OTP to the rider when they arrive</p>
                       <button onClick={() => setShowCancel(true)} className="w-full py-2.5 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
                         Cancel Ride
                       </button>
                     </>
+                  ) : rideDetails?.paymentMethod === 'online' && rideDetails?.paymentStatus !== 'paid' ? (
+                    <>
+                      <div className="flex items-center justify-center gap-2">
+                        <p className="text-3xl font-bold text-primary text-center tracking-widest">{otp || rideDetails?.otp || '----'}</p>
+                        {rideDetails?.rideCode && (
+                          <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{rideDetails.rideCode}</span>
+                        )}
+                      </div>
+                      <p className="text-sm font-semibold text-green-700">Heading to {college?.short || 'college'} →</p>
+                      <PaymentCard ride={rideDetails} />
+                      {paymentPending && (
+                        <p className="text-xs text-gray-500 text-center">Ride ended — waiting for the rider to confirm your payment.</p>
+                      )}
+                    </>
+                  ) : rideDetails?.paymentStatus === 'paid' ? (
+                    <div className="flex flex-col items-center gap-2 py-1">
+                      <div className="inline-flex items-center gap-1.5 bg-green-100 text-green-700 px-3 py-1.5 rounded-full text-sm font-semibold">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12" /></svg>
+                        Payment received
+                      </div>
+                      <p className="text-sm font-semibold text-green-700">Heading to {college?.short || 'college'} →</p>
+                    </div>
                   ) : (
                     <p className="text-sm font-semibold text-green-700">Heading to {college?.short || 'college'} →</p>
                   )}

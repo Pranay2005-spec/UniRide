@@ -281,6 +281,46 @@ exports.verifyPassengerOtp = async (req, res) => {
   }
 };
 
+exports.updatePaymentStatus = async (req, res) => {
+  try {
+    const { paymentStatus } = req.body;
+    if (!['pending', 'paid'].includes(paymentStatus)) {
+      return res.status(400).json({ error: 'Invalid payment status' });
+    }
+
+    const ride = await Ride.findById(req.params.id)
+      .populate('passengers.user', '_id name')
+      .populate('driver', '_id name');
+    if (!ride) return res.status(404).json({ error: 'Ride not found' });
+
+    const isDriver = ride.driver?._id?.toString() === req.userId.toString();
+    if (!isDriver) return res.status(403).json({ error: 'Only the rider can confirm payment' });
+
+    ride.paymentStatus = paymentStatus;
+    await ride.save();
+
+    await RideRequest.updateOne(
+      { matchedRide: ride._id },
+      { paymentStatus }
+    );
+
+    if (global.io) {
+      global.io.to(`ride:${ride._id}`).emit('paymentConfirmed', {
+        rideId: ride._id,
+        paymentStatus,
+        completed: ride.status === 'completed',
+        showReview: paymentStatus === 'paid' && ride.status === 'completed' && ride.passengers.some(p => p.verified),
+        driver: ride.driver ? { _id: ride.driver._id || ride.driver, name: ride.driver.name } : null,
+        passengers: ride.passengers.map(p => ({ _id: p.user?._id || p.user, name: p.user?.name })),
+      });
+    }
+
+    res.json({ success: true, paymentStatus: ride.paymentStatus });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 exports.completeRide = async (req, res) => {
   try {
     // First fetch without populate to get raw driver ObjectId for existing rides
@@ -312,11 +352,13 @@ exports.completeRide = async (req, res) => {
         rideId: ride._id,
         driver: { _id: ride.driver._id, name: ride.driver.name },
         passengers: ride.passengers.map(p => ({ _id: p.user._id, name: p.user.name })),
-        showReview: wasVerified,
+        showReview: wasVerified && (ride.paymentMethod !== 'online' || ride.paymentStatus === 'paid'),
+        paymentMethod: ride.paymentMethod,
+        paymentStatus: ride.paymentStatus,
       });
     }
 
-    res.json({ success: true, showReview: wasVerified, ride });
+    res.json({ success: true, showReview: wasVerified && (ride.paymentMethod !== 'online' || ride.paymentStatus === 'paid'), ride });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -394,7 +436,7 @@ exports.checkMatch = async (req, res) => {
       status: 'accepted',
     }).populate({
       path: 'matchedRide',
-      populate: { path: 'driver', select: 'name collegeName profilePicture phone' },
+      populate: { path: 'driver', select: 'name collegeName profilePicture phone upiId' },
     });
 
     if (!request) {
@@ -424,6 +466,7 @@ exports.checkMatch = async (req, res) => {
         currentLocation: ride.currentLocation,
         price: ride.price,
         paymentMethod: ride.paymentMethod,
+        paymentStatus: ride.paymentStatus,
       },
       otp: otpEntry?.otp || null,
       verified: otpEntry?.verified || false,

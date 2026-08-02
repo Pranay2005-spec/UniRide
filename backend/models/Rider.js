@@ -7,6 +7,7 @@ const riderSchema = new mongoose.Schema({
   profilePicture: String,
   licenseNumber: String,
   licensePhoto: String,
+  upiId: String,
   verificationStatus: { type: String, enum: ['not_submitted', 'pending', 'verified', 'rejected'], default: 'not_submitted' },
   ridesOffered: { type: Number, default: 0 },
   totalEarnings: { type: Number, default: 0 },

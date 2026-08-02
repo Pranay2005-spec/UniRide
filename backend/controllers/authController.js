@@ -123,7 +123,7 @@ exports.getProfile = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const updates = {};
-    const allowed = ['name', 'collegeName', 'rollNumber', 'email'];
+    const allowed = ['name', 'collegeName', 'rollNumber', 'email', 'upiId'];
     allowed.forEach(field => {
       if (req.body[field]) updates[field] = req.body[field];
     });

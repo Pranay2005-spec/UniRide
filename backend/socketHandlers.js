@@ -180,9 +180,9 @@ function setupSocketHandlers(io) {
 
         await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: request.price || 30 } });
 
-        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture avgRating');
+        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture avgRating upiId');
         if (!driverUser) {
-          driverUser = await Rider.findById(socket.userId).select('name profilePicture avgRating');
+          driverUser = await Rider.findById(socket.userId).select('name profilePicture avgRating upiId');
         }
 
         io.to(`user:${request.passenger._id}`).emit('matched', {
@@ -195,6 +195,7 @@ function setupSocketHandlers(io) {
             pickup: ride.pickup,
             route: ride.route,
             paymentMethod: ride.paymentMethod,
+            paymentStatus: ride.paymentStatus,
             otp,
           },
           otp,

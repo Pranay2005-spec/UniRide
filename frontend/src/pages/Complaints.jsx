@@ -1,67 +1,18 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const FAQS = [
+  { q: 'How is my ride fare calculated?', a: 'Fare is dynamic — distance × ₹4 + ₹10. The total is shown before you request a ride and confirmed on your ride card.' },
+  { q: 'How do I pay for an online (UPI) ride?', a: 'After OTP verification, the rider shows a QR code on their phone. Scan it with any UPI app (GPay, PhonePe, Paytm), or tap "Pay Now" in the app. Once paid, tap "I\'ve paid" to confirm.' },
+  { q: 'How does OTP verification work?', a: 'When the rider reaches your pickup, share your 4-digit OTP shown on the ride card. The rider enters it to confirm you are on board.' },
+  { q: 'What is my ride code?', a: 'Every ride has a unique code like RIDE-4A7K2, shown on your ride card. Keep it handy — it helps us track your ride when raising a complaint.' },
+  { q: 'Can I cancel a ride?', a: 'Yes. While searching, tap "Cancel Ride". Your request is cancelled and the next closest passenger is shown to the rider automatically.' },
+  { q: 'How do I become a verified rider?', a: 'Switch to rider mode and sign up with your driving license (number + photo). You can drive only after admin verification sets your status to "verified".' },
+  { q: 'What should I do if payment fails?', a: 'Try the "Pay Now" link again or ask the rider to refresh the QR. If it still fails, pay by cash and tap "I\'ve paid" after settling with the rider.' },
+];
 
 export default function Complaints() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
-
-  const [subject, setSubject] = useState('');
-  const [description, setDescription] = useState('');
-  const [rideCode, setRideCode] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [myComplaints, setMyComplaints] = useState([]);
-  const [view, setView] = useState(() => searchParams.get('view') || 'new');
-
-  useEffect(() => {
-    fetchMyComplaints();
-  }, []);
-
-  useEffect(() => {
-    setSearchParams({ view }, { replace: true });
-  }, [view]);
-
-  async function fetchMyComplaints() {
-    try {
-      const res = await fetch(`${API}/complaints/mine`, {
-        headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-      });
-      const data = await res.json();
-      if (data.success) setMyComplaints(data.complaints);
-    } catch {}
-  }
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!subject || !description) { setError('Fill all fields'); return; }
-
-    setLoading(true);
-    setError('');
-    try {
-      const res = await fetch(`${API}/complaints`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sessionStorage.getItem('token')}` },
-        body: JSON.stringify({ subject, description, rideCode: rideCode || undefined }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setSuccess('Complaint submitted');
-        setSubject('');
-        setDescription('');
-        setRideCode('');
-        fetchMyComplaints();
-        setTimeout(() => setSuccess(''), 3000);
-      } else {
-        setError(data.error || 'Failed to submit');
-      }
-    } catch { setError('Network error'); }
-    finally { setLoading(false); }
-  }
+  const [openFaq, setOpenFaq] = useState(null);
 
   return (
     <div className="pb-20">
@@ -70,48 +21,48 @@ export default function Complaints() {
       </div>
 
       <div className="px-4 -mt-2">
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => setView('new')} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${view === 'new' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>New Complaint</button>
-          <button onClick={() => setView('history')} className={`flex-1 py-2.5 rounded-xl text-sm font-semibold ${view === 'history' ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500'}`}>My Complaints</button>
+        <div className="flex items-center gap-2 mb-3">
+          <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><line x1="12" y1="17" x2="12.01" y2="17" /></svg>
+          </div>
+          <h2 className="text-sm font-bold text-text">Frequently Asked Questions</h2>
         </div>
 
-        {success && <p className="text-green-600 text-sm text-center mb-3 bg-green-50 py-2 rounded-lg">{success}</p>}
-
-        {view === 'new' ? (
-          <div className="bg-white rounded-2xl border border-border p-5">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Ride Code <span className="text-gray-300 font-normal">(optional — found on ride card)</span></label>
-                <input type="text" value={rideCode} onChange={e => setRideCode(e.target.value.toUpperCase())} placeholder="e.g. RIDE-4A7K2" className="input-field !py-3 !text-sm font-mono tracking-wide" />
+        <div className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden">
+          {FAQS.map((faq, i) => {
+            const open = openFaq === i;
+            return (
+              <div key={i} className="border-b border-border/60 last:border-0">
+                <button
+                  onClick={() => setOpenFaq(open ? null : i)}
+                  className="w-full flex items-center justify-between gap-3 px-4 py-3.5 text-left hover:bg-gray-50/50 transition-colors"
+                >
+                  <span className="text-sm font-semibold text-text">{faq.q}</span>
+                  <motion.svg
+                    animate={{ rotate: open ? 180 : 0 }}
+                    width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    className="text-gray-400 shrink-0"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </motion.svg>
+                </button>
+                <AnimatePresence initial={false}>
+                  {open && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeInOut' }}
+                      className="overflow-hidden"
+                    >
+                      <p className="px-4 pb-4 text-xs text-gray-500 leading-relaxed">{faq.a}</p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Subject</label>
-                <input type="text" value={subject} onChange={e => setSubject(e.target.value)} placeholder="Brief title" className="input-field !py-3 !text-sm" />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-500 mb-1 block">Description</label>
-                <textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Describe your issue in detail" rows={4} className="input-field !py-3 !text-sm resize-none" />
-              </div>
-              {error && <p className="text-red-500 text-xs text-center">{error}</p>}
-              <button type="submit" disabled={loading} className="btn-primary !py-3 !text-sm w-full">{loading ? 'Submitting...' : 'Submit Complaint'}</button>
-            </form>
-          </div>
-        ) : (
-          myComplaints.length === 0 ? (
-            <p className="text-center text-gray-400 py-8">No complaints yet</p>
-          ) : (
-            myComplaints.map(c => (
-              <div key={c._id} className="bg-white rounded-xl border border-border p-4 mb-3">
-                <div className="flex justify-between">
-                  <p className="font-semibold text-sm">{c.subject}</p>
-                  <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${c.status === 'pending' ? 'bg-yellow-100 text-yellow-700' : c.status === 'resolved' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>{c.status}</span>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">{c.description}</p>
-                <p className="text-[10px] text-gray-400 mt-2">{new Date(c.createdAt).toLocaleDateString()}</p>
-              </div>
-            ))
-          )
-        )}
+            );
+          })}
+        </div>
       </div>
     </div>
   );

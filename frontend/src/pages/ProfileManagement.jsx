@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 const API = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 export default function ProfileManagement() {
-  const { user, logout, token, setUser } = useAuth();
+  const { user, role, logout, token, setUser } = useAuth();
   const navigate = useNavigate();
 
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
@@ -36,7 +36,7 @@ export default function ProfileManagement() {
   }
 
   function startEdit(field) {
-    const vals = { name: user.name, email: user.email };
+    const vals = { name: user.name, email: user.email, upiId: user.upiId };
     setEditValue(vals[field] || '');
     setEditing(field);
   }
@@ -56,6 +56,7 @@ export default function ProfileManagement() {
       const body = {};
       if (editing === 'name') body.name = editValue.trim();
       if (editing === 'email') body.email = editValue.trim();
+      if (editing === 'upiId') body.upiId = editValue.trim();
 
       const res = await fetch(`${API}/auth/profile`, {
         method: 'PUT',
@@ -190,6 +191,41 @@ export default function ProfileManagement() {
             <p className="text-xs text-gray-400 font-medium">Phone</p>
             <p className="text-sm font-medium text-text mt-0.5">+91 {user.phone || ''}</p>
           </div>
+
+          {/* UPI ID (riders only) */}
+          {role === 'rider' && (
+            <div className="py-4 flex items-center justify-between">
+              <div className="flex-1">
+                <p className="text-xs text-gray-400 font-medium">UPI ID</p>
+                {editing === 'upiId' ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <input
+                      value={editValue}
+                      onChange={e => setEditValue(e.target.value)}
+                      placeholder="yourname@upi"
+                      className="flex-1 text-sm font-medium text-text border border-primary rounded-lg px-3 py-1.5 outline-none focus:ring-2 focus:ring-primary/30"
+                      autoFocus
+                      onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit(); }}
+                    />
+                    <button onClick={saveEdit} disabled={saving} className="text-xs font-semibold text-primary hover:text-primary-600">
+                      {saving ? '...' : 'Save'}
+                    </button>
+                    <button onClick={cancelEdit} className="text-xs font-medium text-gray-400 hover:text-gray-600">Cancel</button>
+                  </div>
+                ) : (
+                  <p className="text-sm font-medium text-text mt-0.5">{user.upiId || 'Not set'}</p>
+                )}
+              </div>
+              {editing !== 'upiId' && (
+                <button onClick={() => startEdit('upiId')} className="w-7 h-7 rounded-full hover:bg-gray-100 flex items-center justify-center shrink-0 ml-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          )}
         </motion.div>
 
         {/* Logout & Delete */}

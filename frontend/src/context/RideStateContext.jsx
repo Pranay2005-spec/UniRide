@@ -42,6 +42,7 @@ export function RideStateProvider({ children }) {
   const [showReview, setShowReview] = useState(false);
   const [reviewTarget, setReviewTarget] = useState(null);
   const [reviewRideId, setReviewRideId] = useState(null);
+  const [paymentPending, setPaymentPending] = useState(false);
 
   // === Rider state ===
   const [riderStep, setRiderStep] = useState(() => {
@@ -104,6 +105,7 @@ export function RideStateProvider({ children }) {
     setFare(null);
     setPaymentMethod('cash');
     setLastError(null);
+    setPaymentPending(false);
     sessionStorage.removeItem(STORAGE_KEY);
   }
 
@@ -118,6 +120,7 @@ export function RideStateProvider({ children }) {
     setRiderPickupPos(null);
     setRiderVerifyMsg('');
     setRiderPos(null);
+    setPaymentPending(false);
     sessionStorage.removeItem(RIDER_STORAGE_KEY);
   }
 
@@ -240,6 +243,7 @@ export function RideStateProvider({ children }) {
       const mr = matchedRideRef.current;
       const rr = riderRideIdRef.current;
       if ((mr && data.rideId === mr) || (rr && data.rideId === rr)) {
+        const isOnline = data.paymentMethod === 'online';
         if (data.showReview) {
           let target;
           if (mr && data.rideId === mr) {
@@ -252,9 +256,40 @@ export function RideStateProvider({ children }) {
             setReviewRideId(data.rideId);
             setShowReview(true);
           }
+        } else if (isOnline) {
+          setPaymentPending(true);
+          return;
         }
         if (mr && data.rideId === mr) clearState();
         if (rr && data.rideId === rr) clearRiderState();
+      }
+    });
+
+    const unsubPayment = on('paymentConfirmed', (data) => {
+      const mr = matchedRideRef.current;
+      const rr = riderRideIdRef.current;
+      if ((mr && data.rideId === mr) || (rr && data.rideId === rr)) {
+        if (data.paymentStatus === 'paid') {
+          setRideDetails(prev => prev ? { ...prev, paymentStatus: 'paid' } : prev);
+          setRiderRideDetails(prev => prev ? { ...prev, paymentStatus: 'paid' } : prev);
+          if (data.showReview) {
+            let target;
+            if (mr && data.rideId === mr) {
+              target = data.driver;
+            } else {
+              target = data.passengers?.[0];
+            }
+            if (target) {
+              setReviewTarget({ _id: target._id, name: target.name });
+              setReviewRideId(data.rideId);
+              setShowReview(true);
+            }
+          }
+          setPaymentPending(false);
+          if (!data.completed) return;
+          if (mr && data.rideId === mr) clearState();
+          if (rr && data.rideId === rr) clearRiderState();
+        }
       }
     });
 
@@ -281,6 +316,7 @@ export function RideStateProvider({ children }) {
       unsubPassLoc();
       unsubDeactivated();
       unsubCompleted();
+      unsubPayment();
       unsubError();
       unsubNewMessage();
     };
@@ -463,12 +499,31 @@ export function RideStateProvider({ children }) {
 
   const riderEndRide = useCallback(() => clearRiderState(), []);
 
+  const riderConfirmPayment = useCallback(async () => {
+    if (!riderRideIdRef.current) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideIdRef.current}/payment`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ paymentStatus: 'paid' }),
+      });
+      const data = await res.json();
+      if (!data.success) return;
+      setRiderRideDetails(prev => prev ? { ...prev, paymentStatus: 'paid' } : prev);
+      setRideDetails(prev => prev ? { ...prev, paymentStatus: 'paid' } : prev);
+    } catch {}
+  }, [token]);
+
   return (
     <RideStateContext.Provider value={{
       // Passenger
       searching, matchedRide, otp, rideDetails, verified,
       college, pickup, fare, passengerPos, lastError,
       showReview, reviewTarget, reviewRideId,
+      paymentPending,
       startRideRequest, cancelRideRequest, retryRideRequest, clearState,
       dismissReview,
       // Rider
@@ -477,6 +532,7 @@ export function RideStateProvider({ children }) {
       riderVerifyMsg, riderPos,
       setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
       riderClearVerifyMsg, riderMarkVerified, riderEndRide,
+      riderConfirmPayment,
       setRiderVerifyMsg, clearRiderState, setRiderStep,
       setRiderCollege, setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
       setRiderPickupPos, setRiderRideId,

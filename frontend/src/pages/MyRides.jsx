@@ -122,6 +122,9 @@ export default function MyRides() {
                               {ride.rideCode && (
                                 <span className="text-[10px] font-mono font-semibold text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">{ride.rideCode}</span>
                               )}
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${ride.paymentMethod === 'online' ? 'text-sky-600 bg-sky-50' : 'text-amber-600 bg-amber-50'}`}>
+                                {ride.paymentMethod === 'online' ? 'UPI' : 'Cash'}
+                              </span>
                             </div>
                           </div>
                         </div>

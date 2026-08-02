@@ -26,6 +26,7 @@ router.delete('/request', auth, rideController.cancelRequest);
 // Passenger location + verification
 router.patch('/:id/passenger-location', auth, rideController.updatePassengerLocation);
 router.post('/:id/verify-passenger', auth, rideController.verifyPassengerOtp);
+router.patch('/:id/payment', auth, rideController.updatePaymentStatus);
 
 // Parameterized routes — must come after all fixed routes
 router.get('/:id', auth, rideController.getRideById);
