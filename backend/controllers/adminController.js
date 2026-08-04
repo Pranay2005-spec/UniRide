@@ -1,6 +1,9 @@
 const User = require('../models/User');
 const Rider = require('../models/Rider');
+const Ride = require('../models/Ride');
+const RideRequest = require('../models/RideRequest');
 const Complaint = require('../models/Complaint');
+const Notification = require('../models/Notification');
 const jwt = require('jsonwebtoken');
 
 exports.adminLogin = async (req, res) => {
@@ -99,6 +102,147 @@ exports.getAllComplaints = async (req, res) => {
       .populate('rideId')
       .sort({ createdAt: -1 });
     res.json({ success: true, complaints });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getStats = async (req, res) => {
+  try {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [totalUsers, totalRiders, todayRides, activeRides, pendingRiders, pendingStudents] = await Promise.all([
+      User.countDocuments({ role: 'passenger' }),
+      Rider.countDocuments(),
+      Ride.countDocuments({ createdAt: { $gte: todayStart, $lte: todayEnd } }),
+      Ride.countDocuments({ status: 'active', active: true }),
+      Rider.countDocuments({ verificationStatus: 'pending' }),
+      User.countDocuments({ studentVerificationStatus: 'pending' }),
+    ]);
+
+    res.json({
+      success: true,
+      stats: { totalUsers, totalRiders, todayRides, activeRides, pendingRiders, pendingStudents },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getLiveRides = async (req, res) => {
+  try {
+    const rides = await Ride.find()
+      .populate('driver', 'name phone profilePicture collegeName vehicleModel')
+      .populate('passengers.user', 'name collegeName profilePicture')
+      .sort({ createdAt: -1 })
+      .limit(100);
+    res.json({ success: true, rides });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getUsers = async (req, res) => {
+  try {
+    const users = await User.find().select('-password -__v').sort({ createdAt: -1 });
+    const riders = await Rider.find().select('-password -__v').sort({ createdAt: -1 });
+    res.json({ success: true, users, riders });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.toggleBlock = async (req, res) => {
+  try {
+    const { id, model, blocked } = req.body;
+    if (!id || !model || typeof blocked !== 'boolean') {
+      return res.status(400).json({ error: 'id, model and blocked (boolean) required' });
+    }
+    if (model === 'Rider') {
+      await Rider.findByIdAndUpdate(id, { blocked });
+    } else {
+      await User.findByIdAndUpdate(id, { blocked });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getAnalytics = async (req, res) => {
+  try {
+    const now = new Date();
+    const daysAgo7 = new Date(now);
+    daysAgo7.setDate(now.getDate() - 6);
+    daysAgo7.setHours(0, 0, 0, 0);
+
+    const [ridesPerDay, topColleges, totals] = await Promise.all([
+      Ride.aggregate([
+        { $match: { createdAt: { $gte: daysAgo7 } } },
+        { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } }, count: { $sum: 1 } } },
+        { $sort: { _id: 1 } },
+      ]),
+      RideRequest.aggregate([
+        { $match: { status: { $in: ['accepted', 'cancelled'] } } },
+        { $group: { _id: '$college.short', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 6 },
+      ]),
+      Ride.aggregate([
+        { $group: {
+            _id: null,
+            total: { $sum: 1 },
+            completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+            cancelled: { $sum: { $cond: [{ $eq: ['$status', 'cancelled'] }, 1, 0] } },
+            active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
+          } },
+      ]),
+    ]);
+
+    res.json({
+      success: true,
+      analytics: {
+        ridesPerDay,
+        topColleges: topColleges.filter(c => c._id),
+        totals: totals[0] || { total: 0, completed: 0, cancelled: 0, active: 0 },
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.broadcastNotification = async (req, res) => {
+  try {
+    const { title, message } = req.body;
+    if (!title || !message) {
+      return res.status(400).json({ error: 'Title and message are required' });
+    }
+
+    const notification = await Notification.create({ title, message });
+
+    if (global.io) {
+      global.io.emit('broadcast', {
+        _id: notification._id,
+        title: notification.title,
+        message: notification.message,
+        createdAt: notification.createdAt,
+      });
+    }
+
+    res.status(201).json({ success: true, notification });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+exports.getBroadcasts = async (req, res) => {
+  try {
+    const notifications = await Notification.find().sort({ createdAt: -1 }).limit(50);
+    res.json({ success: true, notifications });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

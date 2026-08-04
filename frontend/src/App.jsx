@@ -27,6 +27,7 @@ const RiderSignup = lazy(() => import('./pages/RiderSignup'));
 const AdminLogin = lazy(() => import('./pages/AdminLogin'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const Complaints = lazy(() => import('./pages/Complaints'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -115,6 +116,9 @@ export default function App() {
               } />
               <Route path="/app/updates" element={
                 <ProtectedRoute><AppLayout><Updates /></AppLayout></ProtectedRoute>
+              } />
+              <Route path="/app/notifications" element={
+                <ProtectedRoute><AppLayout><Notifications /></AppLayout></ProtectedRoute>
               } />
               <Route path="/app/switch-role" element={
                 <ProtectedRoute><AppLayout><SwitchRole /></AppLayout></ProtectedRoute>

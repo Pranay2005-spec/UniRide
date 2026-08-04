@@ -3,14 +3,7 @@ const RideRequest = require('./models/RideRequest');
 const Ride = require('./models/Ride');
 const User = require('./models/User');
 const Rider = require('./models/Rider');
-
-function calcDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
+const { calcDistance } = require('./utils/distance');
 
 const MAX_DISTANCE = 2000;
 
@@ -25,7 +18,7 @@ function checkRateLimit(socket, event, maxPerMinute = 10) {
   }
   const timestamps = rateLimitMap.get(key).filter(t => now - t < window);
   if (timestamps.length >= maxPerMinute) {
-    socket.emit('error', { message: 'Too many requests. Please slow down.' });
+    socket.emit('error', { message: 'Too many requests. Please slow down.', event });
     return false;
   }
   timestamps.push(now);
@@ -60,7 +53,7 @@ function setupSocketHandlers(io) {
 
     // Passenger requests a ride
     socket.on('requestRide', async (data) => {
-      if (!checkRateLimit(socket, 'requestRide', 5)) return;
+      if (!checkRateLimit(socket, 'requestRide', 10)) return;
       try {
         const { college, pickup, fare, paymentMethod } = data;
 
@@ -97,15 +90,41 @@ function setupSocketHandlers(io) {
     // Cancel pending request
     socket.on('cancelRequest', async () => {
       if (!checkRateLimit(socket, 'cancelRequest', 10)) return;
-      const cancelled = await RideRequest.findOneAndUpdate(
-        { passenger: socket.userId, status: 'pending' },
-        { status: 'cancelled' },
-        { new: true }
-      );
-      if (cancelled) {
-        io.to(`college:${cancelled.college.id}`).emit('passengerCancelled', {
-          requestId: cancelled._id,
-        });
+      try {
+        // Case 1: passenger is still waiting (pending) — just cancel the request
+        const cancelled = await RideRequest.findOneAndUpdate(
+          { passenger: socket.userId, status: 'pending' },
+          { status: 'cancelled' },
+          { new: true }
+        );
+        if (cancelled) {
+          io.to(`college:${cancelled.college.id}`).emit('passengerCancelled', {
+            requestId: cancelled._id,
+          });
+          return;
+        }
+
+        // Case 2: passenger was already matched (accepted) but never picked up —
+        // cancel the request AND the ride, then let the rider go back to searching
+        const accepted = await RideRequest.findOne({ passenger: socket.userId, status: 'accepted' });
+        if (accepted) {
+          const rideId = accepted.matchedRide;
+          accepted.status = 'cancelled';
+          accepted.matchedRide = null;
+          await accepted.save();
+
+          if (rideId) {
+            const ride = await Ride.findById(rideId);
+            if (ride) {
+              ride.active = false;
+              ride.status = 'cancelled';
+              await ride.save();
+              io.to(`ride:${rideId}`).emit('rideDeactivated', { rideId });
+            }
+          }
+        }
+      } catch (err) {
+        socket.emit('error', { message: err.message });
       }
     });
 
@@ -151,6 +170,17 @@ function setupSocketHandlers(io) {
         if (!request) return socket.emit('error', { message: 'Request not found' });
         if (request.status !== 'pending') return socket.emit('error', { message: 'Request already accepted or cancelled' });
 
+        // Resolve the driver account once and verify it is allowed to drive
+        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture avgRating upiId');
+        let driverModel = 'User';
+        if (!driverUser) {
+          driverUser = await Rider.findById(socket.userId).select('name profilePicture avgRating upiId blocked verificationStatus');
+          if (!driverUser) return socket.emit('error', { message: 'Driver account not found' });
+          if (driverUser.blocked) return socket.emit('error', { message: 'Your account has been blocked' });
+          if (driverUser.verificationStatus !== 'verified') return socket.emit('error', { message: 'Your rider account is not verified yet' });
+          driverModel = 'Rider';
+        }
+
         const otp = Math.floor(1000 + Math.random() * 9000).toString();
         const now = new Date();
         const rideCode = await Ride.generateUniqueCode();
@@ -158,7 +188,7 @@ function setupSocketHandlers(io) {
         const ride = await Ride.create({
           rideCode,
           driver: socket.userId,
-          driverModel: 'Rider',
+          driverModel,
           pickup: request.pickup.address,
           route: [{
             college: request.college,
@@ -179,11 +209,6 @@ function setupSocketHandlers(io) {
         await request.save();
 
         await User.findByIdAndUpdate(request.passenger._id, { $inc: { ridesJoined: 1, moneySaved: request.price || 30 } });
-
-        let driverUser = await User.findById(socket.userId).select('name collegeName profilePicture avgRating upiId');
-        if (!driverUser) {
-          driverUser = await Rider.findById(socket.userId).select('name profilePicture avgRating upiId');
-        }
 
         io.to(`user:${request.passenger._id}`).emit('matched', {
           ride: {
@@ -248,7 +273,9 @@ function setupSocketHandlers(io) {
           message: message.trim(),
           timestamp: new Date().toISOString(),
         });
-      } catch {}
+      } catch (err) {
+        console.error('sendMessage error:', err.message);
+      }
     });
 
     // Join ride room for location sharing
@@ -263,7 +290,9 @@ function setupSocketHandlers(io) {
           socket.join(`ride:${rideId}`);
           socket.emit('joinedRideRoom', { rideId });
         }
-      } catch {}
+      } catch (err) {
+        console.error('joinRideRoom error:', err.message);
+      }
     });
 
     // Location updates
@@ -288,7 +317,9 @@ function setupSocketHandlers(io) {
           );
           socket.to(`ride:${rideId}`).emit('passengerLocation', { userId: socket.userId, lat, lng });
         }
-      } catch {}
+      } catch (err) {
+        console.error('updateLocation error:', err.message);
+      }
     });
 
     // On disconnect — cancel pending requests but NOT active rides (survives page refresh)

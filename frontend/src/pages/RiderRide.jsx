@@ -7,6 +7,7 @@ import { useRideState } from '../context/RideStateContext';
 import { MapContainer, TileLayer, Marker, useMap } from 'react-leaflet';
 import { customIcons } from '../lib/customIcons';
 import { buildUpiUrl } from '../lib/upi';
+import { calcDistance } from '../lib/distance';
 import { QRCodeSVG } from 'qrcode.react';
 import colleges from '../data/solapurColleges';
 import ReviewModal from '../components/ReviewModal';
@@ -38,14 +39,6 @@ function FlyToMarker({ position }) {
     }
   }, [position, map]);
   return null;
-}
-
-function calcDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export default function RiderRide() {
@@ -154,15 +147,11 @@ export default function RiderRide() {
 
   async function handleEndRide() {
     if (!riderRideId) return handleDone();
-    const isOnline = riderRideDetails?.paymentMethod === 'online';
     try {
       await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/${riderRideId}/complete`, {
         method: 'PATCH', headers: { Authorization: `Bearer ${token}` },
       });
     } catch {}
-    if (!isOnline) {
-      riderEndRide();
-    }
   }
 
   const destPos = riderCollege ? [riderCollege.lat, riderCollege.lng] : null;

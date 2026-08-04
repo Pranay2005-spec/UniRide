@@ -195,10 +195,27 @@ When `connected` becomes `false` (socket disconnected):
 - Geolocation in `RiderRide.jsx` inside useEffect — must also emit immediately without coords as fallback (timeout 5s)
 
 ## Planned / Discussed
-- **Payment methods:** Cash (keep as-is) + Razorpay (online). Passenger selects at request time. Backend creates Razorpay order on ride acceptance, passenger pays after OTP verification. Webhook to confirm. Models need new fields (see above).
-- **Rider signup simplify:** Remove `docType` dropdown from RiderSignup.jsx. Only ask for driving license (file upload + license number). Update `riderDocs` array in Rider model to be just `drivingLicense` fields.`
-- **Chat between rider & passenger:** Lightweight approach — use existing `ride:${rideId}` socket room. Add `sendMessage` event, no persistence. Inbox icon on Rides.jsx & RiderRide.jsx to open chat bubble overlay. No history needed since rides are short.
-- **Rating & reviews:** 1–5 star rating after each ride. Backend model + endpoint. Prompts both rider and passenger after ride completion.
+
 - **Emergency SOS:** Share ride details (driver name, vehicle number, live location) with emergency contact via SMS. Adds trust `for students/parents.
 - **Separate rider profile page:** Different from passenger profile. Shows earnings, ride history, vehicle details, ratings. Passenger profile keeps it simple (rides joined, money saved).
 - No OOP refactor planned — current functional style is fine for project size.
+
+## TODO — Next Session
+
+### 1. Payment History page (`/app/payments`)
+
+Currently `Payments.jsx` is a static placeholder — it does nothing. Build a real history:
+
+- Each entry shows: **rider name**, **payment method** (Cash / UPI), **fare price**, **ride ID**.
+- Works for both roles (rider sees their passengers + earnings; passenger sees the driver they paid).
+- Add a backend endpoint (e.g. `GET /api/payments/history`) returning rides with `driver`/`passengers` populated, `price`, `paymentMethod`, `paymentStatus`, `_id`, sorted by date desc.
+- Follow the pattern used in `MyRides.jsx` + `getMyRideHistory` in `backend/controllers/rideController.js`.
+
+### 2. UPI ID verification (approved approach)
+
+Decision: **format validation + PSP handle whitelist** (free, offline) and rely on the UPI app's own VPA check at pay time as the final safety net. No live VPA lookup API (needs paid merchant keys).
+
+- Add a shared regex validating `local-part@handle` (local: alphanumeric + `.-_`; handle: real PSP like `ybl`, `oksbi`, `okhdfcbank`, `okaxis`, `paytm`, `apl`, etc.).
+- Keep a whitelist of valid UPI handles; reject unknown ones.
+- Enforce **client-side** (ProfileManagement UPI field, instant feedback) and **server-side** (authController `updateProfile`) so it can't be bypassed.
+- No live API check — the passenger's UPI app validates the VPA when they tap "Pay Now"; rider can always update their UPI ID from Profile.

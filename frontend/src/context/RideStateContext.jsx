@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import { useSocket } from './SocketContext';
 import { useAuth } from './AuthContext';
+import { calcDistance } from '../lib/distance';
 
 const RideStateContext = createContext();
 
@@ -13,14 +14,6 @@ function loadPersisted(key) {
     if (s) return JSON.parse(s);
   } catch {}
   return {};
-}
-
-function calcDistance(lat1, lng1, lat2, lng2) {
-  const R = 6371000;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLng = (lng2 - lng1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 export function RideStateProvider({ children }) {
@@ -69,6 +62,16 @@ export function RideStateProvider({ children }) {
   matchedRideRef.current = matchedRide;
   const riderRideIdRef = useRef(riderRideId);
   riderRideIdRef.current = riderRideId;
+  const collegeRef = useRef(college);
+  collegeRef.current = college;
+  const pickupRef = useRef(pickup);
+  pickupRef.current = pickup;
+  const fareRef = useRef(fare);
+  fareRef.current = fare;
+  const paymentMethodRef = useRef(paymentMethod);
+  paymentMethodRef.current = paymentMethod;
+  const riderCollegeRef = useRef(riderCollege);
+  riderCollegeRef.current = riderCollege;
   const riderPosRef = useRef(null);
   const locWatcherRef = useRef(null);
   const wasConnectedRef = useRef(false);
@@ -124,6 +127,51 @@ export function RideStateProvider({ children }) {
     sessionStorage.removeItem(RIDER_STORAGE_KEY);
   }
 
+  // Return a passenger to the searching state without losing their chosen
+  // route. The server already released their request back into the pool.
+  const resumeSearching = useCallback(() => {
+    const c = collegeRef.current;
+    const p = pickupRef.current;
+    if (!c?.id || !p) return clearState();
+    setMatchedRide(null);
+    setOtp(null);
+    setRideDetails(null);
+    setVerified(false);
+    setSearching(true);
+    setLastError(null);
+    setPaymentPending(false);
+  }, [clearState]);
+
+  // Return a rider to the searching phase for the same college they chose.
+  const resumeRiderSearch = useCallback(() => {
+    const rc = riderCollegeRef.current;
+    if (!rc?.id) return clearRiderState();
+    setWaitingPassengers([]);
+    setAcceptedPassenger(null);
+    setRiderRideId(null);
+    setRiderOtp(null);
+    setRiderRideDetails(null);
+    setRiderPickupPos(null);
+    setRiderVerifyMsg('');
+    setRiderPos(null);
+    setPaymentPending(false);
+    setRiderStep('searching');
+    sessionStorage.removeItem(RIDER_STORAGE_KEY);
+    let fallback = setTimeout(() => emit('findRiders', { collegeId: rc.id }), 5000);
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          clearTimeout(fallback);
+          const { latitude: lat, longitude: lng } = pos.coords;
+          riderPosRef.current = { lat, lng };
+          emit('findRiders', { collegeId: rc.id, riderLat: lat, riderLng: lng });
+        },
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000 }
+      );
+    }
+  }, [emit]);
+
   // On mount, verify persisted match is still valid (passenger)
   useEffect(() => {
     if (!connected || !matchedRide) return;
@@ -141,7 +189,9 @@ export function RideStateProvider({ children }) {
           if (data.ride) setRideDetails(data.ride);
           emit('joinRideRoom', matchedRide);
         }
-      } catch {}
+      } catch (err) {
+        console.error('Failed to restore persisted ride:', err);
+      }
     })();
   }, [connected]);
 
@@ -160,7 +210,9 @@ export function RideStateProvider({ children }) {
           setRiderRideDetails(data.ride);
           emit('joinRideRoom', riderRideId);
         }
-      } catch {}
+      } catch (err) {
+        console.error('Failed to restore persisted rider ride:', err);
+      }
     })();
   }, [connected]);
 
@@ -233,10 +285,9 @@ export function RideStateProvider({ children }) {
     const unsubDeactivated = on('rideDeactivated', (data) => {
       const mr = matchedRideRef.current;
       const rr = riderRideIdRef.current;
-      if ((mr && data.rideId === mr) || (rr && data.rideId === rr)) {
-        if (mr && data.rideId === mr) clearState();
-        if (rr && data.rideId === rr) clearRiderState();
-      }
+      // Ride cancelled — both sides go back to searching for other people.
+      if (mr && data.rideId === mr) resumeSearching();
+      if (rr && data.rideId === rr) resumeRiderSearch();
     });
 
     const unsubCompleted = on('rideCompleted', (data) => {
@@ -260,8 +311,14 @@ export function RideStateProvider({ children }) {
           setPaymentPending(true);
           return;
         }
-        if (mr && data.rideId === mr) clearState();
-        if (rr && data.rideId === rr) clearRiderState();
+        if (mr && data.rideId === mr) {
+          if (data.verified) clearState();
+          else resumeSearching();
+        }
+        if (rr && data.rideId === rr) {
+          if (data.verified) clearRiderState();
+          else resumeRiderSearch();
+        }
       }
     });
 
@@ -287,14 +344,23 @@ export function RideStateProvider({ children }) {
           }
           setPaymentPending(false);
           if (!data.completed) return;
-          if (mr && data.rideId === mr) clearState();
-          if (rr && data.rideId === rr) clearRiderState();
+          if (mr && data.rideId === mr) {
+            if (data.verified) clearState();
+            else resumeSearching();
+          }
+          if (rr && data.rideId === rr) {
+            if (data.verified) clearRiderState();
+            else resumeRiderSearch();
+          }
         }
       }
     });
 
     const unsubError = on('error', (data) => {
       setLastError(data.message || 'An error occurred');
+      if (data.event === 'requestRide') {
+        setSearching(false);
+      }
     });
 
     // --- Chat ---

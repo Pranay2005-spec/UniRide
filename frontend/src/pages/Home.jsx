@@ -6,6 +6,7 @@ import LocationPicker from '../components/LocationPicker';
 import { useAuth } from '../context/AuthContext';
 import { useRideState } from '../context/RideStateContext';
 import { useSavedRoutes } from '../hooks/useSavedRoutes';
+import { calcDistanceKm, calcRideFare } from '../lib/distance';
 import colleges from '../data/solapurColleges';
 
 const allColleges = colleges;
@@ -18,7 +19,7 @@ function getGreeting() {
 }
 
 export default function Home() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { routes, addRoute, removeRoute, loading } = useSavedRoutes(user?.id || user?._id);
@@ -37,6 +38,19 @@ export default function Home() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState('cash');
   const [toast, setToast] = useState({ visible: false, message: '', type: 'success' });
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/notifications`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(data => { if (!cancelled && data.success) setUnreadCount(data.unreadCount); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [token]);
 
   useEffect(() => {
     if (selectedCollege) {
@@ -131,22 +145,11 @@ export default function Home() {
     setSelectedCollege(route.college);
   }
 
-  function calcDistance() {
-    if (!pickup?.position || !selectedCollege?.lat || !selectedCollege?.lng) return null;
-    const [lat1, lon1] = pickup.position;
-    const lat2 = selectedCollege.lat;
-    const lon2 = selectedCollege.lng;
-    const R = 6371;
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2)**2;
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c;
-  }
-
-  const distance = calcDistance();
-  const bikePrice = distance ? Math.round(distance * 4 + 10) : null;
-  const carPrice = distance ? Math.round(distance * 8 + 15) : null;
+  const distance = pickup?.position && selectedCollege?.lat != null && selectedCollege?.lng != null
+    ? calcDistanceKm(pickup.position[0], pickup.position[1], selectedCollege.lat, selectedCollege.lng)
+    : null;
+  const bikePrice = distance != null ? Math.round(distance * 4 + 10) : null;
+  const carPrice = distance != null ? Math.round(distance * 8 + 15) : null;
 
   return (
     <div className="pb-20 relative overflow-hidden">
@@ -197,12 +200,28 @@ export default function Home() {
             </h1>
             <p className="text-xs text-gray-500">Share the journey, save the cost</p>
           </div>
-          <button
-            onClick={() => navigate('/app/profile')}
-            className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary font-bold text-sm"
-          >
-            {user?.name?.[0] || '?'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => navigate('/app/notifications')}
+              className="relative w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-primary-700">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => navigate('/app/profile')}
+              className="w-9 h-9 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 font-bold text-sm"
+            >
+              {user?.name?.[0] || '?'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -418,7 +437,7 @@ export default function Home() {
                     onClick={() => {
                       if (matchedRide || searching) { showToastMsg('You already have an active ride', 'error'); return; }
                       sessionStorage.removeItem('ur_ride'); navigate('/app/rides', {
-                      state: { college: route.college, pickup: route.pickup, fare: route.pickup?.position && route.college?.lat && route.college?.lng ? Math.round((() => { const [lat1, lon1] = route.pickup.position; const R = 6371; const dLat = (route.college.lat - lat1) * Math.PI / 180; const dLon = (route.college.lng - lon1) * Math.PI / 180; return R * 2 * Math.atan2(Math.sqrt(Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(route.college.lat * Math.PI / 180) * Math.sin(dLon/2)**2), Math.sqrt(1 - (Math.sin(dLat/2)**2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(route.college.lat * Math.PI / 180) * Math.sin(dLon/2)**2))); })() * 4 + 10) : null }
+                      state: { college: route.college, pickup: route.pickup, fare: calcRideFare(route.pickup, route.college) }
                     }); }}
                     className="text-xs font-medium text-primary-600"
                   >

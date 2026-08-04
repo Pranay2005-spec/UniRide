@@ -3,6 +3,21 @@ const User = require('../models/User');
 const Rider = require('../models/Rider');
 const RideRequest = require('../models/RideRequest');
 
+// When a ride ends/cancels, send any of its passengers' requests back to the
+// pending pool so OTHER riders can see and accept them again.
+async function releasePassengers(ride) {
+  const requests = await RideRequest.find({ matchedRide: ride._id, status: 'accepted' });
+  for (const request of requests) {
+    request.status = 'pending';
+    request.matchedRide = null;
+    await request.save();
+    const populated = await RideRequest.findById(request._id).populate('passenger', 'name collegeName profilePicture');
+    if (global.io) {
+      global.io.to(`college:${request.college.id}`).emit('newPassenger', populated);
+    }
+  }
+}
+
 exports.createRide = async (req, res) => {
   try {
     const { pickup, destination, route, date, time, seats, price } = req.body;
@@ -309,9 +324,10 @@ exports.updatePaymentStatus = async (req, res) => {
         rideId: ride._id,
         paymentStatus,
         completed: ride.status === 'completed',
+        verified: ride.passengers.some(p => p.verified),
         showReview: paymentStatus === 'paid' && ride.status === 'completed' && ride.passengers.some(p => p.verified),
         driver: ride.driver ? { _id: ride.driver._id || ride.driver, name: ride.driver.name } : null,
-        passengers: ride.passengers.map(p => ({ _id: p.user?._id || p.user, name: p.user?.name })),
+        passengers: ride.passengers.map(p => ({ _id: p.user?._id || p.user, name: p.user?.name, verified: p.verified })),
       });
     }
 
@@ -347,11 +363,18 @@ exports.completeRide = async (req, res) => {
     ride.active = false;
     await ride.save();
 
+    // If no passenger was ever verified, they never actually rode —
+    // release them back to the waiting pool so they can find another rider.
+    if (!wasVerified) {
+      await releasePassengers(ride);
+    }
+
     if (global.io) {
       global.io.to(`ride:${ride._id}`).emit('rideCompleted', {
         rideId: ride._id,
         driver: { _id: ride.driver._id, name: ride.driver.name },
-        passengers: ride.passengers.map(p => ({ _id: p.user._id, name: p.user.name })),
+        passengers: ride.passengers.map(p => ({ _id: p.user._id, name: p.user.name, verified: p.verified })),
+        verified: wasVerified,
         showReview: wasVerified && (ride.paymentMethod !== 'online' || ride.paymentStatus === 'paid'),
         paymentMethod: ride.paymentMethod,
         paymentStatus: ride.paymentStatus,
@@ -372,6 +395,9 @@ exports.deactivateRide = async (req, res) => {
     ride.active = false;
     ride.status = 'cancelled';
     await ride.save();
+
+    // A cancelled ride releases its passengers back to the waiting pool.
+    await releasePassengers(ride);
 
     if (global.io) {
       global.io.to(`ride:${ride._id}`).emit('rideDeactivated', {

@@ -54,6 +54,10 @@ exports.verifyOtp = async (req, res) => {
       }
     }
 
+    if (user.blocked) {
+      return res.status(403).json({ error: 'Your account has been blocked by the admin. Contact support for assistance.' });
+    }
+
     const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
     res.json({
@@ -323,6 +327,10 @@ exports.loginRider = async (req, res) => {
       return res.status(400).json({ error: 'No rider account found with this phone. Please set up one first.' });
     }
 
+    if (rider.blocked) {
+      return res.status(403).json({ error: 'Your account has been blocked by the admin. Contact support for assistance.' });
+    }
+
     if (rider.verificationStatus !== 'verified') {
       return res.status(403).json({ error: 'Your rider application is pending admin approval. Please wait for verification.' });
     }
@@ -362,6 +370,9 @@ exports.verifyRiderOtp = async (req, res) => {
 
     const rider = await Rider.findOne({ phone });
     if (!rider) return res.status(400).json({ error: 'Rider account not found' });
+    if (rider.blocked) {
+      return res.status(403).json({ error: 'Your account has been blocked by the admin. Contact support for assistance.' });
+    }
     if (rider.verificationStatus !== 'verified') {
       return res.status(403).json({ error: 'Your rider application is pending admin approval. Please wait for verification.' });
     }

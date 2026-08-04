@@ -13,6 +13,7 @@ const riderSchema = new mongoose.Schema({
   totalEarnings: { type: Number, default: 0 },
   avgRating: { type: Number, default: 0 },
   totalReviews: { type: Number, default: 0 },
+  blocked: { type: Boolean, default: false },
 }, { timestamps: true });
 
 module.exports = mongoose.model('Rider', riderSchema);
