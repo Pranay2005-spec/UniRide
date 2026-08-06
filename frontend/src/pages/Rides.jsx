@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -25,14 +25,6 @@ const messages = [
   'Hold tight, we\'re almost there...',
   'Locating the best ride for you...',
 ];
-
-function getTileUrl(lat, lng, zoom = 14) {
-  const n = Math.pow(2, zoom);
-  const x = Math.floor((lng + 180) / 360 * n);
-  const latRad = lat * Math.PI / 180;
-  const y = Math.floor((1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n);
-  return `https://tile.openstreetmap.org/${zoom}/${x}/${y}.png`;
-}
 
 function PaymentCard({ ride }) {
   const upiUrl = buildUpiUrl({
@@ -71,10 +63,14 @@ function PaymentCard({ ride }) {
 
 function FlyToMarker({ position }) {
   const map = useMap();
+  const lastRef = useRef(null);
   useEffect(() => {
-    if (position) {
-      map.flyTo(position, 14, { duration: 1 });
-    }
+    if (!position) return;
+    const [lat, lng] = position;
+    const last = lastRef.current;
+    if (last && Math.abs(last[0] - lat) < 0.0005 && Math.abs(last[1] - lng) < 0.0005) return;
+    lastRef.current = [lat, lng];
+    map.flyTo(position, 14, { duration: 1 });
   }, [position, map]);
   return null;
 }
@@ -84,7 +80,7 @@ export default function Rides() {
   const { connected } = useSocket();
   const {
     searching, matchedRide, otp, rideDetails, verified,
-    college, pickup, fare, passengerPos, lastError,
+    college, pickup, passengerPos, lastError,
     showReview, reviewTarget, reviewRideId,
     paymentPending,
     startRideRequest, cancelRideRequest, retryRideRequest,
@@ -117,7 +113,9 @@ export default function Rides() {
     return () => clearInterval(interval);
   }, [college, pickup]);
 
-  // Start ride request — from navState on fresh navigation, or resume existing
+  // Start ride request — from navState on fresh navigation only. A refresh or
+  // revisit resumes from context state (and is validated server-side in the
+  // context), so it must NOT re-create a request here.
   useEffect(() => {
     if (!connected) return;
     if (matchedRide) return;
@@ -126,8 +124,6 @@ export default function Rides() {
     if (navState?.college && navState?.pickup) {
       startRideRequest(navState.college, navState.pickup, navState.fare, navState.paymentMethod);
       setInitializing(false);
-    } else if (college?.id && pickup) {
-      startRideRequest(college, pickup, fare);
     }
   }, [connected]);
 
@@ -167,30 +163,28 @@ export default function Rides() {
     return (
       <>
         <div className="pb-20 relative">
-          <div className="relative w-full overflow-hidden" style={{ height: '60vh', background: 'linear-gradient(180deg, #f0fdf4 0%, #dcfce7 30%, #bbf7d0 60%, #86efac 100%)' }}>
-            <div className="absolute inset-0 opacity-20" style={{
-              backgroundImage: `linear-gradient(90deg, #166534 1px, transparent 1px), linear-gradient(0deg, #166534 1px, transparent 1px)`,
-              backgroundSize: '60px 60px',
-            }} />
-            <div className="absolute inset-0 opacity-10" style={{
-              backgroundImage: `linear-gradient(35deg, #166534 1.5px, transparent 1.5px), linear-gradient(-35deg, #166534 1.5px, transparent 1.5px)`,
-              backgroundSize: '120px 120px',
-            }} />
-            <div className="absolute w-24 h-16 rounded-full bg-green-300/30 left-[15%] top-[25%]" />
-            <div className="absolute w-32 h-20 rounded-full bg-green-300/25 right-[20%] top-[55%]" />
-            <div className="absolute w-40 h-28 rounded-[40%] bg-blue-300/25 right-[10%] top-[15%]" />
+          <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
+            <MapContainer center={[passengerPos?.lat || 17.6759, passengerPos?.lng || 75.9067]} zoom={13} className="absolute inset-0 w-full h-full z-0" zoomControl={false}>
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              {passengerPos && (
+                <>
+                  <Marker position={[passengerPos.lat, passengerPos.lng]} icon={customIcons.youAreHereIcon} />
+                  <FlyToMarker position={[passengerPos.lat, passengerPos.lng]} />
+                </>
+              )}
+            </MapContainer>
             <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent pointer-events-none" />
           </div>
 
-          <div className="px-4 -mt-12 relative z-10">
-            <div className="bg-white rounded-2xl border border-border shadow-sm p-6 text-center">
-              <div className="w-14 h-14 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-3">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
+          <div className="px-4 -mt-4 relative z-10">
+            <div className="bg-white rounded-2xl border border-border shadow-sm p-4 text-center">
+              <div className="w-11 h-11 rounded-full bg-primary-100 flex items-center justify-center mx-auto mb-2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
               </div>
-              <p className="text-base font-semibold text-text">No ride booked yet</p>
-              <p className="text-sm text-gray-400 mt-1 mb-5">Choose your pickup and destination to get started</p>
-              <button onClick={() => navigate('/app/home')} className="btn-primary flex items-center justify-center gap-2">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+              <p className="text-[15px] font-semibold text-text">No ride booked yet</p>
+              <p className="text-xs text-gray-400 mt-0.5 mb-3">Choose your pickup and destination to get started</p>
+              <button onClick={() => navigate('/app/home')} className="btn-primary !py-2 !text-sm flex items-center justify-center gap-2">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
                 Book a Ride
               </button>
             </div>
@@ -354,67 +348,22 @@ export default function Rides() {
       ) : (
         <>
           <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
-            {pickupPos && (
-              <img src={getTileUrl(pickupPos[0], pickupPos[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
-            )}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute inset-0" style={{ backgroundImage: `linear-gradient(90deg, rgba(0,0,0,0.5) 1px, transparent 1px), linear-gradient(0deg, rgba(0,0,0,0.5) 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-            </div>
-
-            <svg className="absolute inset-0 w-full h-full pointer-events-none z-[5]" viewBox="0 0 400 400" preserveAspectRatio="none">
-              <path d="M40 340 Q200 280 360 60" stroke="#c3f832" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" />
-              <path d="M40 340 Q200 280 360 60" stroke="#22C55E" strokeWidth="3" fill="none" strokeDasharray="10 8" opacity="0.7" transform="translate(0, 4)" />
-              <circle cx="40" cy="340" r="8" fill="#c3f832" stroke="#292928" strokeWidth="2" />
-              <circle cx="360" cy="60" r="8" fill="#22C55E" stroke="#292928" strokeWidth="2" />
-              <circle cx="40" cy="340" r="14" fill="none" stroke="#c3f832" strokeWidth="2" opacity="0.5">
-                <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
-              </circle>
-              <circle cx="360" cy="60" r="14" fill="none" stroke="#22C55E" strokeWidth="2" opacity="0.5">
-                <animate attributeName="r" values="14;26;14" dur="1.5s" repeatCount="indefinite" />
-                <animate attributeName="opacity" values="0.5;0;0.5" dur="1.5s" repeatCount="indefinite" />
-              </circle>
-            </svg>
-
-            <div className="absolute z-[6]" style={{ left: '20%', top: '72%' }}>
-              <motion.div animate={{ scale: [1, 1.8, 1], opacity: [0.7, 0, 0.7] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }} className="w-2.5 h-2.5 rounded-full bg-primary" />
-            </div>
-            <div className="absolute z-[6]" style={{ left: '50%', top: '52%' }}>
-              <motion.div animate={{ scale: [1, 1.8, 1], opacity: [0.7, 0, 0.7] }} transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }} className="w-2 h-2 rounded-full bg-green-400" />
-            </div>
-            <div className="absolute z-[6]" style={{ left: '75%', top: '32%' }}>
-              <motion.div animate={{ scale: [1, 1.8, 1], opacity: [0.7, 0, 0.7] }} transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut', delay: 1 }} className="w-2 h-2 rounded-full bg-green-400" />
-            </div>
-
-            <div className="absolute z-[6]" style={{ left: '86%', top: '10%' }}>
-              <svg width="32" height="32" viewBox="0 0 200 200" fill="none">
-                <rect x="25" y="75" width="150" height="105" rx="3" stroke="#22C55E" strokeWidth="3" fill="rgba(34,197,94,0.1)" />
-                <polygon points="100,15 15,75 185,75" stroke="#22C55E" strokeWidth="3" fill="none" />
-                <rect x="40" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="65" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="95" y="75" width="10" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="129" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="154" y="75" width="6" height="105" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="88" y="130" width="24" height="50" rx="2" stroke="#22C55E" strokeWidth="1.5" fill="rgba(34,197,94,0.1)" />
-                <rect x="46" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="69" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="119" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-                <rect x="142" y="90" width="12" height="16" rx="1.5" stroke="#22C55E" strokeWidth="1.5" />
-              </svg>
-            </div>
-
-            <motion.div
-              className="absolute z-10 pointer-events-none"
-              style={{ left: '10%', top: '80%' }}
-              animate={{ left: ['10%', '85%'], top: ['80%', '10%'] }}
-              transition={{ duration: 5, repeat: Infinity, ease: 'linear' }}
+            <MapContainer
+              center={[pickupPos?.[0] || college?.lat || 17.68, pickupPos?.[1] || college?.lng || 75.91]}
+              zoom={14}
+              className="absolute inset-0 w-full h-full z-0"
+              zoomControl={false}
             >
-              <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center shadow-lg shadow-primary/60 border-2 border-white">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#292928" strokeWidth="2.5"><circle cx="5" cy="17" r="3" /><circle cx="19" cy="17" r="3" /><path d="M10 17h4l3-7-4-2-3 4h-4" /><line x1="6" y1="11" x2="10" y2="11" /></svg>
-              </div>
-              <motion.div className="absolute -bottom-1 -right-1 w-16 h-16 rounded-full bg-primary/20 -z-10" animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }} transition={{ duration: 1.5, repeat: Infinity }} />
-            </motion.div>
-
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              {pickupPos && (
+                <>
+                  <Marker position={[pickupPos[0], pickupPos[1]]} icon={customIcons.passengerPulseIcon} />
+                  <FlyToMarker position={[pickupPos[0], pickupPos[1]]} />
+                </>
+              )}
+              {passengerPos && <Marker position={[passengerPos.lat, passengerPos.lng]} icon={customIcons.youAreHereIcon} />}
+              {college?.lat != null && college?.lng != null && <Marker position={[college.lat, college.lng]} icon={customIcons.destinationIcon} />}
+            </MapContainer>
             <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
           </div>
 

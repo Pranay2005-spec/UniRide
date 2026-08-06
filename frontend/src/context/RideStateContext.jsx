@@ -78,11 +78,16 @@ export function RideStateProvider({ children }) {
   const wasConnectedRef = useRef(false);
 
   // === Persist passenger state ===
+  // Only persist while a ride is actually matched. Persisting a bare search
+  // (college/pickup with no ride) is what let a refresh restore the searching
+  // screen after a completed ride.
   useEffect(() => {
-    if (matchedRide || college) {
+    if (matchedRide) {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
         matchedRide, otp, college, pickup, fare, verified, rideDetails, paymentMethod,
       }));
+    } else {
+      sessionStorage.removeItem(STORAGE_KEY);
     }
   }, [matchedRide, otp, college, pickup, fare, verified, rideDetails, paymentMethod]);
 
@@ -175,9 +180,13 @@ export function RideStateProvider({ children }) {
     }
   }, [emit]);
 
-  // On mount, verify persisted match is still valid (passenger)
+  // On mount, verify a persisted ride/search is still valid (passenger).
+  // A stale search (college/pickup from a completed ride) must not auto-resume.
   useEffect(() => {
-    if (!connected || !matchedRide) return;
+    if (!connected) return;
+    const mr = matchedRideRef.current;
+    const c = collegeRef.current;
+    if (!mr && !c) return;
     (async () => {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/rides/my-match`, {
@@ -185,12 +194,16 @@ export function RideStateProvider({ children }) {
         });
         const data = await res.json();
         if (!data.matched) {
-          clearState();
-        } else if (data.otp) {
+          // No active ride → clear the persisted session. Never auto-resume a
+          // search from a refresh: a leftover pending request (whose cancel on
+          // socket disconnect races this check) must not resurface "searching".
+          return clearState();
+        }
+        if (data.otp) {
           setOtp(data.otp);
           setVerified(data.verified);
           if (data.ride) setRideDetails(data.ride);
-          emit('joinRideRoom', matchedRide);
+          emit('joinRideRoom', mr);
         }
       } catch (err) {
         console.error('Failed to restore persisted ride:', err);
@@ -412,6 +425,36 @@ export function RideStateProvider({ children }) {
     };
   }, [matchedRide]);
 
+  // === Geolocation watcher while passenger is searching ===
+  // Keeps a live "you are here" dot on the searching map.
+  useEffect(() => {
+    if (!searching || !navigator.geolocation) return;
+    const watcher = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setPassengerPos({ lat, lng });
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
+    );
+    return () => navigator.geolocation.clearWatch(watcher);
+  }, [searching]);
+
+  // === Geolocation watcher while passenger is idle (no ride/search) ===
+  // Populates the live "you are here" dot on the "No ride booked yet" screen.
+  useEffect(() => {
+    if (matchedRide || searching || !navigator.geolocation) return;
+    const watcher = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        setPassengerPos({ lat, lng });
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
+    );
+    return () => navigator.geolocation.clearWatch(watcher);
+  }, [matchedRide, searching]);
+
   // === Geolocation watcher while rider is in a ride ===
   useEffect(() => {
     if (!riderRideId || !riderOtp || !navigator.geolocation) return;
@@ -427,6 +470,25 @@ export function RideStateProvider({ children }) {
     );
     return () => navigator.geolocation.clearWatch(watcher);
   }, [riderRideId, riderOtp]);
+
+  // === Geolocation watcher while rider is picking a college or searching ===
+  // Keeps the live map dot (you-are-here) updated on the pick/searching screens
+  // and keeps riderPosRef fresh so newPassenger distance sorting stays accurate.
+  useEffect(() => {
+    if (riderStep !== 'pick' && riderStep !== 'searching') return;
+    if (!navigator.geolocation) return;
+    const watcher = navigator.geolocation.watchPosition(
+      (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        const newPos = { lat, lng };
+        setRiderPos(newPos);
+        riderPosRef.current = newPos;
+      },
+      () => {},
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 3000 }
+    );
+    return () => navigator.geolocation.clearWatch(watcher);
+  }, [riderStep]);
 
   // Reset on connection loss — but only after initial connection established (not on mount)
   useEffect(() => {

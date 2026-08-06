@@ -466,7 +466,8 @@ exports.checkMatch = async (req, res) => {
     });
 
     if (!request) {
-      return res.json({ success: true, matched: false });
+      const hasPending = await RideRequest.exists({ passenger: req.userId, status: 'pending' });
+      return res.json({ success: true, matched: false, hasPending: !!hasPending });
     }
 
     const ride = request.matchedRide;
@@ -475,7 +476,8 @@ exports.checkMatch = async (req, res) => {
         request.status = 'cancelled';
         await request.save();
       }
-      return res.json({ success: true, matched: false });
+      const hasPending = await RideRequest.exists({ passenger: req.userId, status: 'pending' });
+      return res.json({ success: true, matched: false, hasPending: !!hasPending });
     }
 
     const otpEntry = ride.passengers.find(
