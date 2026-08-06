@@ -108,10 +108,6 @@ export default function Rides() {
     }
   }, [role]);
 
-  if (redirecting) return null;
-
-  const pickupPos = pickup?.position;
-
   // Rotate searching messages
   useEffect(() => {
     if (!college || !pickup) return;
@@ -134,6 +130,10 @@ export default function Rides() {
       startRideRequest(college, pickup, fare);
     }
   }, [connected]);
+
+  if (redirecting) return null;
+
+  const pickupPos = pickup?.position;
 
   function handleCancel(reason) {
     setShowCancel(false);

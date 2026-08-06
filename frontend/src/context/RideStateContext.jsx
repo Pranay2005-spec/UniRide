@@ -51,6 +51,7 @@ export function RideStateProvider({ children }) {
   const [riderPickupPos, setRiderPickupPos] = useState(() => loadPersisted(RIDER_STORAGE_KEY).pickupPos || null);
   const [riderVerifyMsg, setRiderVerifyMsg] = useState('');
   const [riderPos, setRiderPos] = useState(null);
+  const [skippedPassengers, setSkippedPassengers] = useState([]);
 
   // === Chat state ===
   const [chatMessages, setChatMessages] = useState([]);
@@ -123,6 +124,7 @@ export function RideStateProvider({ children }) {
     setRiderPickupPos(null);
     setRiderVerifyMsg('');
     setRiderPos(null);
+    setSkippedPassengers([]);
     setPaymentPending(false);
     sessionStorage.removeItem(RIDER_STORAGE_KEY);
   }
@@ -154,6 +156,7 @@ export function RideStateProvider({ children }) {
     setRiderPickupPos(null);
     setRiderVerifyMsg('');
     setRiderPos(null);
+    setSkippedPassengers([]);
     setPaymentPending(false);
     setRiderStep('searching');
     sessionStorage.removeItem(RIDER_STORAGE_KEY);
@@ -514,6 +517,7 @@ export function RideStateProvider({ children }) {
     setRiderCollege(col);
     setRiderStep('searching');
     setWaitingPassengers([]);
+    setSkippedPassengers([]);
     startFindRiders(col.id);
   }, [startFindRiders]);
 
@@ -548,6 +552,12 @@ export function RideStateProvider({ children }) {
 
   const riderClearVerifyMsg = useCallback(() => setRiderVerifyMsg(''), []);
 
+  // Hide a passenger from THIS rider's list (client-side only). The passenger's
+  // request stays in the pool for other riders — they just won't appear again here.
+  const skipPassenger = useCallback((requestId) => {
+    setSkippedPassengers(prev => prev.includes(requestId) ? prev : [...prev, requestId]);
+  }, []);
+
   const riderMarkVerified = useCallback(() => {
     setRiderRideDetails(prev => {
       if (!prev) return prev;
@@ -564,6 +574,14 @@ export function RideStateProvider({ children }) {
   }, [acceptedPassenger]);
 
   const riderEndRide = useCallback(() => clearRiderState(), []);
+
+  // Rider cancels an accepted ride before pickup. The server releases the
+  // passenger back to the pool and emits rideDeactivated to the ride room,
+  // which this context already handles (resumeRiderSearch / resumeSearching).
+  const riderCancelRide = useCallback(() => {
+    if (!riderRideIdRef.current) return;
+    emit('riderCancelRide', riderRideIdRef.current);
+  }, [emit]);
 
   const riderConfirmPayment = useCallback(async () => {
     if (!riderRideIdRef.current) return;
@@ -595,10 +613,10 @@ export function RideStateProvider({ children }) {
       // Rider
       riderStep, riderCollege, waitingPassengers, acceptedPassenger,
       riderRideId, riderOtp, riderRideDetails, riderPickupPos,
-      riderVerifyMsg, riderPos,
+      riderVerifyMsg, riderPos, skippedPassengers,
       setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
-      riderClearVerifyMsg, riderMarkVerified, riderEndRide,
-      riderConfirmPayment,
+      riderClearVerifyMsg, riderMarkVerified, riderEndRide, riderCancelRide,
+      riderConfirmPayment, skipPassenger,
       setRiderVerifyMsg, clearRiderState, setRiderStep,
       setRiderCollege, setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
       setRiderPickupPos, setRiderRideId,

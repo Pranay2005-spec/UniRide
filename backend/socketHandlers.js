@@ -48,8 +48,95 @@ function setupSocketHandlers(io) {
     }
   });
 
+  // Re-queue a cancelled ride's accepted passengers so other riders can see them.
+  async function releaseRidePassengers(ride) {
+    const requests = await RideRequest.find({ matchedRide: ride._id, status: 'accepted' });
+    for (const request of requests) {
+      request.status = 'pending';
+      request.matchedRide = null;
+      await request.save();
+      const populated = await RideRequest.findById(request._id).populate('passenger', 'name collegeName profilePicture');
+      if (populated) {
+        io.to(`college:${populated.college.id}`).emit('newPassenger', populated);
+      }
+    }
+  }
+
+  async function deactivateRide(rideId) {
+    const ride = await Ride.findById(rideId);
+    if (!ride) return;
+    ride.active = false;
+    ride.status = 'cancelled';
+    await ride.save();
+    io.to(`ride:${rideId}`).emit('rideDeactivated', { rideId });
+  }
+
+  // Delayed cleanup for accepted rides when a user's socket drops. The grace
+  // period lets a page refresh reconnect and keep the ride — only truly
+  // abandoned rides (no reconnect within DISCONNECT_GRACE_MS) get cancelled.
+  const disconnectCleanupTimers = new Map();
+  const DISCONNECT_GRACE_MS = 30000;
+
+  function clearScheduledCleanup(userId) {
+    const key = String(userId);
+    const timer = disconnectCleanupTimers.get(key);
+    if (timer) {
+      clearTimeout(timer);
+      disconnectCleanupTimers.delete(key);
+    }
+  }
+
+  function scheduleDisconnectCleanup(userId) {
+    clearScheduledCleanup(userId);
+    const key = String(userId);
+    const timer = setTimeout(async () => {
+      disconnectCleanupTimers.delete(key);
+      try {
+        // If the user still has a live socket (e.g. a second tab open), they are
+        // NOT actually gone — leave their rides alone.
+        const room = io.sockets.adapter.rooms.get(`user:${key}`);
+        if (room && room.size > 0) return;
+
+        // Passenger side: an accepted request means a ride exists — cancel both.
+        const accepted = await RideRequest.findOne({ passenger: userId, status: 'accepted' });
+        if (accepted) {
+          if (accepted.matchedRide) await deactivateRide(accepted.matchedRide);
+          accepted.status = 'cancelled';
+          accepted.matchedRide = null;
+          await accepted.save();
+        }
+        // Rider side: any active ride they were driving gets cancelled and its
+        // passengers are released back to the waiting pool.
+        const ride = await Ride.findOne({ driver: userId, active: true, status: 'active' });
+        if (ride) {
+          await releaseRidePassengers(ride);
+          await deactivateRide(ride._id);
+        }
+      } catch {}
+    }, DISCONNECT_GRACE_MS);
+    disconnectCleanupTimers.set(key, timer);
+  }
+
+  // Timeout auto-cancel: stale pending requests (no rider accepted within
+  // REQUEST_TIMEOUT_MS) are cancelled so riders don't chase ghosts.
+  const REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+  setInterval(async () => {
+    try {
+      const cutoff = new Date(Date.now() - REQUEST_TIMEOUT_MS);
+      const stale = await RideRequest.find({ status: 'pending', createdAt: { $lt: cutoff } });
+      for (const request of stale) {
+        request.status = 'cancelled';
+        await request.save();
+        io.to(`college:${request.college.id}`).emit('passengerCancelled', {
+          requestId: request._id,
+        });
+      }
+    } catch {}
+  }, 60000);
+
   io.on('connection', (socket) => {
     socket.join(`user:${socket.userId}`);
+    clearScheduledCleanup(socket.userId);
 
     // Passenger requests a ride
     socket.on('requestRide', async (data) => {
@@ -62,6 +149,13 @@ function setupSocketHandlers(io) {
         }
         if (!pickup || !pickup.address || !pickup.position) {
           return socket.emit('error', { message: 'Pickup location is required' });
+        }
+
+        // Superseding: if the passenger already has an accepted request, deactivate
+        // its ride too — otherwise the old rider is left on a dead match.
+        const oldAccepted = await RideRequest.find({ passenger: socket.userId, status: 'accepted' });
+        for (const old of oldAccepted) {
+          if (old.matchedRide) await deactivateRide(old.matchedRide);
         }
 
         await RideRequest.updateMany(
@@ -239,6 +333,21 @@ function setupSocketHandlers(io) {
       }
     });
 
+    // Rider cancels an accepted ride before pickup — passenger request goes back
+    // to the waiting pool so another rider can pick it up.
+    socket.on('riderCancelRide', async (rideId) => {
+      if (!checkRateLimit(socket, 'riderCancelRide', 10)) return;
+      try {
+        const ride = await Ride.findOne({ _id: rideId, driver: socket.userId, active: true, status: 'active' });
+        if (!ride) return socket.emit('error', { message: 'No active ride to cancel' });
+        await releaseRidePassengers(ride);
+        await deactivateRide(ride._id);
+        socket.emit('rideCancelled', { success: true });
+      } catch (err) {
+        socket.emit('error', { message: err.message });
+      }
+    });
+
     // Chat messages
     socket.on('sendMessage', async (data) => {
       if (!checkRateLimit(socket, 'sendMessage', 20)) return;
@@ -322,7 +431,8 @@ function setupSocketHandlers(io) {
       }
     });
 
-    // On disconnect — cancel pending requests but NOT active rides (survives page refresh)
+    // On disconnect — cancel pending requests immediately, but give accepted
+    // rides a grace window so a page refresh (brief reconnect) doesn't kill them.
     socket.on('disconnect', async () => {
       try {
         const pending = await RideRequest.findOneAndUpdate(
@@ -335,6 +445,7 @@ function setupSocketHandlers(io) {
             requestId: pending._id,
           });
         }
+        scheduleDisconnectCleanup(socket.userId);
       } catch {}
     });
   });

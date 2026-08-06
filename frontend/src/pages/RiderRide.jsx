@@ -47,12 +47,12 @@ export default function RiderRide() {
   const {
     riderStep, riderCollege, waitingPassengers, acceptedPassenger,
     riderRideId, riderOtp, riderRideDetails, riderPickupPos,
-    riderVerifyMsg, riderPos,
+    riderVerifyMsg, riderPos, skippedPassengers,
     showReview, reviewTarget, reviewRideId,
     paymentPending,
     setRiderCollegeAndSearch, stopFindRiders, riderAcceptRequest,
-    riderClearVerifyMsg, riderMarkVerified, riderEndRide,
-    riderConfirmPayment,
+    riderClearVerifyMsg, riderMarkVerified, riderEndRide, riderCancelRide,
+    riderConfirmPayment, skipPassenger,
     setRiderVerifyMsg, setRiderCollege, clearRiderState, setRiderStep,
     setAcceptedPassenger, setRiderOtp, setRiderRideDetails,
     setRiderPickupPos, setRiderRideId, dismissReview,
@@ -105,6 +105,10 @@ export default function RiderRide() {
     riderAcceptRequest(requestId, passengerData, passengerPickup);
   }
 
+  function handleSkipPassenger() {
+    if (visiblePassenger) skipPassenger(visiblePassenger._id);
+  }
+
   function handleVerifyOtp() {
     setOtpInput('');
     setShowOtpModal(true);
@@ -154,7 +158,13 @@ export default function RiderRide() {
     } catch {}
   }
 
+  function handleRiderCancel() {
+    riderCancelRide();
+    setShowOtpModal(false);
+  }
+
   const destPos = riderCollege ? [riderCollege.lat, riderCollege.lng] : null;
+  const visiblePassenger = waitingPassengers.find(p => !skippedPassengers.includes(p._id));
   const verifyMatchId = String(acceptedPassenger?._id);
   const upiUrl = buildUpiUrl({
     upiId: user?.upiId,
@@ -385,13 +395,19 @@ export default function RiderRide() {
                           End Ride
                         </button>
                       )}
+                      {!paymentPending && !isVerified && (
+                        <button onClick={handleRiderCancel} className="w-full py-2.5 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50 transition-colors">
+                          Cancel Ride
+                        </button>
+                      )}
                     </div>
                   </motion.div>
 </div>
             </div>
             </div>
           ) : (
-            <div className="relative w-full overflow-hidden bg-gray-100" style={{ height: '60vh' }}>
+            <div className="flex flex-col h-[calc(100vh-5rem)]">
+            <div className="flex-1 min-h-0 relative w-full overflow-hidden bg-gray-100">
               {destPos && (
                 <img src={getTileUrl(destPos[0], destPos[1], 14)} alt="" className="absolute inset-0 w-full h-full object-cover" onError={e => { e.target.style.display = 'none'; }} />
               )}
@@ -484,11 +500,9 @@ export default function RiderRide() {
 
               <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-white to-transparent z-10 pointer-events-none" />
             </div>
-          )}
-
-          {!riderOtp && (
-          <div className="px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh] sm:max-h-none sm:overflow-visible">
-            {riderVerifyMsg && !riderOtp && (
+            {!riderOtp && (
+            <div className="shrink-0 px-4 -mt-8 relative z-20 overflow-y-auto max-h-[50vh]">
+              {riderVerifyMsg && !riderOtp && (
               <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mb-3 p-3 rounded-xl bg-red-50 border border-red-200 text-sm text-red-600 text-center">
                 {riderVerifyMsg}
               </motion.div>
@@ -496,9 +510,9 @@ export default function RiderRide() {
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-2xl border border-border shadow-sm p-4"
+              className="bg-white rounded-2xl border border-border shadow-sm overflow-hidden"
             >
-              <div className="flex items-center gap-3 mb-4">
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border bg-gray-50/60">
                 <div className="flex flex-col items-center gap-0.5">
                   <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                   <div className="w-0.5 h-6 bg-gray-300" />
@@ -508,12 +522,23 @@ export default function RiderRide() {
                   <p className="text-sm font-medium text-text">Your Location</p>
                   <p className="text-sm text-gray-500 truncate">{riderCollege.short}</p>
                 </div>
+                {riderStep === 'searching' && (
+                  <span className="text-[10px] font-semibold text-green-700 bg-green-50 px-2 py-1 rounded-full">Finding riders</span>
+                )}
               </div>
+              <AnimatePresence mode="wait">
 
-              {riderStep === 'searching' && waitingPassengers.length === 0 && (
-                <>
+              {riderStep === 'searching' && (waitingPassengers.length === 0 || !visiblePassenger) && (
+                <motion.div
+                  key="searching"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -8 }}
+                  transition={{ duration: 0.2 }}
+                  className="p-4"
+                >
                   <div className="flex items-center justify-center gap-2 mb-3">
-                    <motion.span key={msgIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="text-sm text-gray-500">{messages[msgIndex]}</motion.span>
+                    <motion.span key={msgIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="text-sm text-gray-500">{waitingPassengers.length > 0 ? 'No more nearby passengers — waiting for new requests...' : messages[msgIndex]}</motion.span>
                     <span className="flex gap-0.5">
                       {[0, 1, 2].map(i => (<motion.span key={i} animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.2, repeat: Infinity, delay: i * 0.2 }} className="w-1.5 h-1.5 rounded-full bg-primary" />))}
                     </span>
@@ -524,42 +549,90 @@ export default function RiderRide() {
                   <button onClick={handleDone} className="w-full py-3 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
                     Cancel
                   </button>
-                </>
+                </motion.div>
               )}
 
-              {riderStep === 'searching' && waitingPassengers.length > 0 && !riderOtp && (
-                <div className="space-y-3">
-                  <div className="bg-green-50 rounded-xl p-4 border border-green-200">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-12 h-12 rounded-full bg-primary flex items-center justify-center text-text font-bold text-lg">
-                        {waitingPassengers[0].passenger.name?.[0] || '?'}
-                      </div>
-                      <div className="flex-1">
-                        <p className="text-base font-semibold text-text">{waitingPassengers[0].passenger.name || 'Student'}</p>
-                        <p className="text-xs text-gray-500">{waitingPassengers[0].pickup.address}</p>
-                        <p className="text-sm text-green-700 font-medium mt-0.5">₹{waitingPassengers[0].price ?? riderRideDetails?.price ?? FARE} fare</p>
-                        {waitingPassengers[0].distance != null && (
-                          <p className="text-xs text-gray-400 mt-0.5">{waitingPassengers[0].distance >= 1000 ? (waitingPassengers[0].distance / 1000).toFixed(1) + ' km' : waitingPassengers[0].distance + ' m'} away</p>
-                        )}
-                      </div>
+              {riderStep === 'searching' && visiblePassenger && !riderOtp && (
+                <motion.div
+                  key={visiblePassenger._id}
+                  initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -16, scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+                  className="p-4"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                      </span>
+                      <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Passenger nearby</span>
                     </div>
-                    <button
-                      onClick={() => handleConfirmRide(waitingPassengers[0]._id, waitingPassengers[0].passenger, waitingPassengers[0].pickup)}
-                      className="w-full py-3 rounded-xl bg-primary text-text font-semibold text-sm hover:bg-primary-400 transition-colors"
-                    >
-                      Confirm Ride
-                    </button>
+                    {visiblePassenger.distance != null && (
+                      <span className="text-xs font-medium text-gray-400">{visiblePassenger.distance >= 1000 ? (visiblePassenger.distance / 1000).toFixed(1) + ' km' : visiblePassenger.distance + ' m'}</span>
+                    )}
                   </div>
-                  <button onClick={handleDone} className="w-full py-3 rounded-xl border-2 border-red-200 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+
+                  <div className="flex items-center gap-3 pb-3">
+                    <div className="w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden shrink-0">
+                      {visiblePassenger.passenger.profilePicture ? (
+                        <img src={visiblePassenger.passenger.profilePicture} alt={visiblePassenger.passenger.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-primary font-bold text-lg">{visiblePassenger.passenger.name?.[0] || '?'}</span>
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] font-semibold text-text truncate">{visiblePassenger.passenger.name || 'Student'}</p>
+                      {visiblePassenger.passenger.collegeName && (
+                        <p className="text-xs text-gray-400 truncate">{visiblePassenger.passenger.collegeName}</p>
+                      )}
+                      <p className="text-xs text-gray-500 flex items-center gap-1 mt-1 truncate">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#9CA3AF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" /><circle cx="12" cy="10" r="3" /></svg>
+                        {visiblePassenger.pickup.address}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="h-px bg-border mb-3" />
+
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-400">Trip fare</p>
+                      <p className="text-lg font-bold text-text">₹{visiblePassenger.price ?? riderRideDetails?.price ?? FARE}</p>
+                    </div>
+                    {visiblePassenger.paymentMethod === 'online' ? (
+                      <span className="text-[10px] font-semibold text-sky-600 bg-sky-50 px-2 py-1 rounded-lg">UPI Payment</span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg">Cash Payment</span>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleConfirmRide(visiblePassenger._id, visiblePassenger.passenger, visiblePassenger.pickup)}
+                    className="w-full py-3.5 rounded-xl bg-primary text-text font-bold text-sm hover:bg-primary-400 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
+                    Confirm Ride
+                  </button>
+                  <button onClick={handleSkipPassenger} className="w-full py-3 mt-2 rounded-xl border border-gray-200 text-gray-500 text-sm font-medium hover:bg-gray-50 hover:text-gray-700 transition-colors flex items-center justify-center gap-1.5">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     Cancel
                   </button>
-                </div>
+                </motion.div>
               )}
 
               {riderOtp && acceptedPassenger && (
-                <div>
+                <motion.div
+                  key="confirmed"
+                  initial={{ opacity: 0, y: 24, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -16, scale: 0.98 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 28 }}
+                  className="p-4"
+                >
                   <div className="text-center py-2">
-                    <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 overflow-hidden flex items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-primary mx-auto mb-3 overflow-hidden flex items-center justify-center ring-4 ring-primary/15">
                       {acceptedPassenger.profilePicture ? (
                         <img src={acceptedPassenger.profilePicture} alt={acceptedPassenger.name} className="w-full h-full object-cover" />
                       ) : (
@@ -637,11 +710,19 @@ export default function RiderRide() {
                         End Ride
                       </button>
                     )}
+                    {!paymentPending && !isVerified && (
+                      <button onClick={handleRiderCancel} className="mt-2 py-2 px-6 rounded-xl border-2 border-gray-200 text-gray-500 text-sm font-semibold hover:bg-gray-50 transition-colors">
+                        Cancel Ride
+                      </button>
+                    )}
                   </div>
-                </div>
+                </motion.div>
               )}
+              </AnimatePresence>
             </motion.div>
-          </div>
+            </div>
+            )}
+            </div>
           )}
         </>
       )}

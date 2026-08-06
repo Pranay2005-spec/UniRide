@@ -8,8 +8,6 @@ export default function ProfilePage() {
   const { user, role, token } = useAuth();
   const navigate = useNavigate();
 
-  if (!user) return null;
-
   const [avgRating, setAvgRating] = useState(0);
   const [totalReviews, setTotalReviews] = useState(0);
 
@@ -25,6 +23,8 @@ export default function ProfilePage() {
       }
     }).catch(() => {});
   }, [user?.id, user?._id, role]);
+
+  if (!user) return null;
 
   const verStatus = role === 'rider' ? user.riderVerificationStatus : user.studentVerificationStatus;
 
